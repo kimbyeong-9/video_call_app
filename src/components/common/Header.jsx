@@ -1,11 +1,28 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
+import { FiBell, FiSettings } from 'react-icons/fi';
 import LogoImage from '../../assets/images/logo/travo_logo.png';
 import { myProfileData } from '../../data/MyProfileData';
+import NotificationPopup from './NotificationPopup';
 
 const Header = () => {
   const navigate = useNavigate();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notificationRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   return (
     <HeaderWrapper>
@@ -21,15 +38,20 @@ const Header = () => {
       </LogoSection>
 
       <IconSection>
-        <IconButton>
-          <NotificationIcon>
-            🔔
-          </NotificationIcon>
-          <NotificationBadge />
-        </IconButton>
-        <IconButton>
+        <NotificationWrapper ref={notificationRef}>
+          <IconButton onClick={() => setShowNotifications(!showNotifications)}>
+            <NotificationIcon>
+              <FiBell size={20} />
+            </NotificationIcon>
+            <NotificationBadge />
+          </IconButton>
+          {showNotifications && (
+            <NotificationPopup onClose={() => setShowNotifications(false)} />
+          )}
+        </NotificationWrapper>
+        <IconButton onClick={() => navigate('/settings')}>
           <SettingsIcon>
-            ⚙️
+            <FiSettings size={20} />
           </SettingsIcon>
         </IconButton>
       </IconSection>
@@ -98,6 +120,10 @@ const IconSection = styled.div`
   display: flex;
   gap: 16px;
   align-items: center;
+`;
+
+const NotificationWrapper = styled.div`
+  position: relative;
 `;
 
 const IconButton = styled.button`

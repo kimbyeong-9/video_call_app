@@ -16,6 +16,7 @@ import Search from '../pages/Search';
 import Live from '../pages/Live';
 import Mypage from '../pages/Profiles/Mypage';
 import UserProfile from '../pages/Profiles/UserProfile';
+import EditProfile from '../pages/Profiles/EditProfile';
 
 const AppRoutes = () => {
   const routes = useRoutes([
@@ -75,6 +76,10 @@ const AppRoutes = () => {
         {
           path: 'profiles/me',
           element: <Mypage />
+        },
+        {
+          path: 'profiles/edit',
+          element: <EditProfile />
         },
         {
           path: 'profiles/:userId',

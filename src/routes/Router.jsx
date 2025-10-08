@@ -10,11 +10,12 @@ import Signup from '../pages/Signup';
 import Recovery from '../pages/Recovery';
 import Chatlist from '../pages/Chatlist';
 import Chatting from '../pages/Chatting';
-import Profiles from '../pages/Profiles';
 import Auth from '../pages/Auth';
 import Friends from '../pages/Friends';
 import Search from '../pages/Search';
 import Live from '../pages/Live';
+import Mypage from '../pages/Profiles/Mypage';
+import UserProfile from '../pages/Profiles/UserProfile';
 
 const AppRoutes = () => {
   const routes = useRoutes([
@@ -72,8 +73,12 @@ const AppRoutes = () => {
           element: <Live />
         },
         {
-          path: 'profiles',
-          element: <Profiles />
+          path: 'profiles/me',
+          element: <Mypage />
+        },
+        {
+          path: 'profiles/:userId',
+          element: <UserProfile />
         }
       ]
     },

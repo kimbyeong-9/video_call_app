@@ -1,14 +1,17 @@
 import React from 'react';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import { friendsData } from '../../data/FriendsData';
 
 const Friends = () => {
+  const navigate = useNavigate();
+
   return (
     <FriendsWrapper>
       <CategoryTitle>친구</CategoryTitle>
       <FriendsList>
         {friendsData.map((friend) => (
-          <FriendItem key={friend.id}>
+          <FriendItem key={friend.id} onClick={() => navigate(`/profiles/${friend.id}`)}>
             <ProfileSection>
               <ProfileImage src={friend.profileImage} alt={friend.nickname} />
               {friend.isOnline && <OnlineIndicator />}
@@ -69,6 +72,7 @@ const FriendsList = styled.div`
 `;
 
 const FriendItem = styled.div`
+  cursor: pointer;
   display: flex;
   align-items: flex-start;
   padding: 16px;
@@ -79,11 +83,6 @@ const FriendItem = styled.div`
   border: 1px solid rgba(255, 255, 255, 0.8);
   transition: all 0.3s ease;
 
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(43, 87, 154, 0.15);
-    border: 1px solid var(--primary-light-blue);
-  }
 `;
 
 const ProfileSection = styled.div`

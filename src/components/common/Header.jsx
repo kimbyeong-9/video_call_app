@@ -2,15 +2,16 @@ import React from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import LogoImage from '../../assets/images/logo/travo_logo.png';
+import { myProfileData } from '../../data/MyProfileData';
 
 const Header = () => {
   const navigate = useNavigate();
 
   return (
     <HeaderWrapper>
-      <ProfileSection onClick={() => navigate('/profiles')}>
+      <ProfileSection onClick={() => navigate('/profiles/me')}>
         <ProfileImage 
-          src="https://api.dicebear.com/7.x/avataaars/svg?seed=felix" 
+          src={myProfileData.profileImage}
           alt="profile" 
         />
       </ProfileSection>
@@ -54,6 +55,15 @@ const ProfileSection = styled.div`
   width: 36px;
   height: 36px;
   cursor: pointer;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
 `;
 
 const ProfileImage = styled.img`
@@ -61,8 +71,15 @@ const ProfileImage = styled.img`
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid #2B579A;
+  border: 2px solid var(--primary-blue);
   padding: 2px;
+  box-shadow: 0 2px 4px rgba(43, 87, 154, 0.1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    border-color: var(--primary-dark-blue);
+    box-shadow: 0 2px 8px rgba(43, 87, 154, 0.2);
+  }
 `;
 
 const LogoSection = styled.div`
@@ -89,10 +106,10 @@ const IconButton = styled.button`
   padding: 8px;
   cursor: pointer;
   position: relative;
+  font-size: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
   
   &:hover {
     opacity: 0.8;

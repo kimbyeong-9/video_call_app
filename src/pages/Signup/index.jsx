@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
+import { auth, supabase } from '../../utils/supabase';
+import NotificationPopup from '../../components/common/NotificationPopup';
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -28,6 +30,12 @@ const Signup = () => {
     service: false,
     privacy: false,
     age: false,
+  });
+
+  const [notification, setNotification] = useState({
+    show: false,
+    message: '',
+    type: 'success'
   });
 
   const validateEmail = (email) => {
@@ -101,8 +109,44 @@ const Signup = () => {
       }));
       return;
     }
-    // TODO: 닉네임 중복 확인 API 호출
-    alert('사용 가능한 닉네임입니다.');
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('nickname')
+        .eq('nickname', formData.nickname)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116는 결과가 없을 때의 에러 코드
+        throw error;
+      }
+
+      if (data) {
+        setNotification({
+          show: true,
+          message: '이미 사용 중인 닉네임입니다.',
+          type: 'error'
+        });
+      } else {
+        setNotification({
+          show: true,
+          message: '사용 가능한 닉네임입니다.',
+          type: 'success'
+        });
+      }
+
+      // 3초 후 알림 자동 닫기
+      setTimeout(() => {
+        setNotification(prev => ({ ...prev, show: false }));
+      }, 3000);
+    } catch (error) {
+      console.error('닉네임 중복 확인 실패:', error);
+      setNotification({
+        show: true,
+        message: '닉네임 중복 확인에 실패했습니다. 다시 시도해주세요.',
+        type: 'error'
+      });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -122,18 +166,67 @@ const Signup = () => {
 
     if (isEmailValid && isNicknameValid && isPasswordValid && isConfirmPasswordValid) {
       try {
-        // TODO: 회원가입 API 호출
-        console.log('회원가입 데이터:', formData);
-        navigate('/login');
+        // 회원가입 처리
+        const { data, error } = await auth.signUp(
+          formData.email,
+          formData.password,
+          formData.nickname
+        );
+
+        if (error) {
+          console.error('회원가입 에러:', error);
+          
+          if (error.message.includes('already registered')) {
+            setNotification({
+              show: true,
+              message: '이미 등록된 이메일입니다.',
+              type: 'error'
+            });
+          } else if (error.message.includes('duplicate key')) {
+            setNotification({
+              show: true,
+              message: '이미 사용 중인 닉네임입니다.',
+              type: 'error'
+            });
+          } else {
+            setNotification({
+              show: true,
+              message: error.message || '회원가입에 실패했습니다. 다시 시도해주세요.',
+              type: 'error'
+            });
+          }
+          return;
+        }
+
+        setNotification({
+          show: true,
+          message: '회원가입이 완료되었습니다. 로그인 페이지로 이동합니다.',
+          type: 'success'
+        });
+
+        setTimeout(() => {
+          navigate('/login');
+        }, 1500);
       } catch (error) {
         console.error('회원가입 실패:', error);
-        alert('회원가입에 실패했습니다. 다시 시도해주세요.');
+        setNotification({
+          show: true,
+          message: '회원가입에 실패했습니다. 다시 시도해주세요.',
+          type: 'error'
+        });
       }
     }
   };
 
   return (
     <SignupWrapper>
+      {notification.show && (
+        <NotificationPopup
+          message={notification.message}
+          type={notification.type}
+          onClose={() => setNotification(prev => ({ ...prev, show: false }))}
+        />
+      )}
       <SignupForm onSubmit={handleSubmit}>
         <Title>회원가입</Title>
 

@@ -3,6 +3,8 @@ import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
+import { auth, supabase } from '../../utils/supabase';
+import NotificationPopup from '../../components/common/NotificationPopup';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -11,7 +13,11 @@ const Login = () => {
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [notification, setNotification] = useState({
+    show: false,
+    message: '',
+    type: 'error'
+  });
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -19,22 +25,88 @@ const Login = () => {
       ...prev,
       [name]: value
     }));
-    setError(''); // 입력 시 에러 메시지 초기화
+    // 입력 시 알림 메시지 초기화
+    setNotification(prev => ({ ...prev, show: false }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.email || !formData.password) {
-      setError('이메일과 비밀번호를 모두 입력해주세요.');
+      setNotification({
+        show: true,
+        message: '이메일과 비밀번호를 모두 입력해주세요.',
+        type: 'error'
+      });
       return;
     }
 
     try {
-      // TODO: 로그인 API 호출
-      console.log('로그인 시도:', formData);
-      navigate('/'); // 로그인 성공 시 홈으로 이동
+      // Supabase Auth로 로그인 시도
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password
+      });
+
+      if (authError) {
+        // 이메일 존재 여부 확인
+        const { data: emailCheck } = await supabase
+          .from('users')
+          .select('email')
+          .eq('email', formData.email)
+          .single();
+
+        if (!emailCheck) {
+          setNotification({
+            show: true,
+            message: '등록되지 않은 아이디입니다.',
+            type: 'error'
+          });
+        } else {
+          setNotification({
+            show: true,
+            message: '비밀번호가 일치하지 않습니다.',
+            type: 'error'
+          });
+        }
+        return;
+      }
+
+      // 사용자 추가 정보 가져오기
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (userError) {
+        throw userError;
+      }
+
+      // 로그인 성공
+      setNotification({
+        show: true,
+        message: '로그인에 성공했습니다.',
+        type: 'success'
+      });
+
+      // 세션 저장 (localStorage 사용)
+      localStorage.setItem('user', JSON.stringify({
+        id: userData.id,
+        email: userData.email,
+        nickname: userData.nickname
+      }));
+
+      // 1초 후 홈으로 이동
+      setTimeout(() => {
+        navigate('/');
+      }, 1000);
     } catch (error) {
-      setError('로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.');
+      console.error('로그인 에러:', error);
+      setNotification({
+        show: true,
+        message: '로그인 중 오류가 발생했습니다.',
+        type: 'error'
+      });
     }
   };
 
@@ -45,10 +117,15 @@ const Login = () => {
 
   return (
     <LoginWrapper>
+      {notification.show && (
+        <NotificationPopup
+          message={notification.message}
+          type={notification.type}
+          onClose={() => setNotification(prev => ({ ...prev, show: false }))}
+        />
+      )}
       <LoginForm onSubmit={handleSubmit}>
         <Title>로그인</Title>
-
-        {error && <ErrorMessage>{error}</ErrorMessage>}
 
         <InputGroup>
           <Label>이메일</Label>

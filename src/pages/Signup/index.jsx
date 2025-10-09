@@ -177,6 +177,7 @@ const Signup = () => {
               placeholder="비밀번호를 입력하세요"
             />
             <PasswordToggle
+              type="button"
               onClick={() => setShowPassword(prev => ({
                 ...prev,
                 password: !prev.password
@@ -199,6 +200,7 @@ const Signup = () => {
               placeholder="비밀번호를 다시 입력하세요"
             />
             <PasswordToggle
+              type="button"
               onClick={() => setShowPassword(prev => ({
                 ...prev,
                 confirmPassword: !prev.confirmPassword
@@ -214,43 +216,52 @@ const Signup = () => {
           <TermsTitle>약관 동의</TermsTitle>
           <TermsGroup>
             <TermsItem>
-              <Checkbox
-                type="checkbox"
-                id="service"
-                checked={terms.service}
-                onChange={(e) => setTerms(prev => ({
-                  ...prev,
-                  service: e.target.checked
-                }))}
-              />
+              <CheckboxWrapper>
+                <Checkbox
+                  type="checkbox"
+                  id="service"
+                  checked={terms.service}
+                  onChange={(e) => setTerms(prev => ({
+                    ...prev,
+                    service: e.target.checked
+                  }))}
+                />
+                <CheckboxCustom checked={terms.service} />
+              </CheckboxWrapper>
               <TermsLabel htmlFor="service">
                 서비스 이용약관 동의 (필수)
               </TermsLabel>
             </TermsItem>
             <TermsItem>
-              <Checkbox
-                type="checkbox"
-                id="privacy"
-                checked={terms.privacy}
-                onChange={(e) => setTerms(prev => ({
-                  ...prev,
-                  privacy: e.target.checked
-                }))}
-              />
+              <CheckboxWrapper>
+                <Checkbox
+                  type="checkbox"
+                  id="privacy"
+                  checked={terms.privacy}
+                  onChange={(e) => setTerms(prev => ({
+                    ...prev,
+                    privacy: e.target.checked
+                  }))}
+                />
+                <CheckboxCustom checked={terms.privacy} />
+              </CheckboxWrapper>
               <TermsLabel htmlFor="privacy">
                 개인정보 처리방침 동의 (필수)
               </TermsLabel>
             </TermsItem>
             <TermsItem>
-              <Checkbox
-                type="checkbox"
-                id="age"
-                checked={terms.age}
-                onChange={(e) => setTerms(prev => ({
-                  ...prev,
-                  age: e.target.checked
-                }))}
-              />
+              <CheckboxWrapper>
+                <Checkbox
+                  type="checkbox"
+                  id="age"
+                  checked={terms.age}
+                  onChange={(e) => setTerms(prev => ({
+                    ...prev,
+                    age: e.target.checked
+                  }))}
+                />
+                <CheckboxCustom checked={terms.age} />
+              </CheckboxWrapper>
               <TermsLabel htmlFor="age">
                 만 14세 이상입니다 (필수)
               </TermsLabel>
@@ -311,7 +322,7 @@ const Label = styled.label`
 const Input = styled.input`
   width: 100%;
   padding: 12px 16px;
-  border: 1px solid var(--border-color);
+  border: 2px solid #d1d5db;
   border-radius: 8px;
   font-size: 16px;
   color: var(--text-primary);
@@ -320,6 +331,10 @@ const Input = styled.input`
   &:focus {
     outline: none;
     border-color: var(--primary-blue);
+  }
+
+  &::placeholder {
+    color: #9ca3af;
   }
 `;
 
@@ -359,6 +374,10 @@ const PasswordToggle = styled.button`
   padding: 0;
   display: flex;
   align-items: center;
+
+  &:focus {
+    outline: none;
+  }
 `;
 
 const ErrorMessage = styled.span`
@@ -391,10 +410,45 @@ const TermsItem = styled.div`
   gap: 8px;
 `;
 
+const CheckboxWrapper = styled.div`
+  position: relative;
+  width: 20px;
+  height: 20px;
+`;
+
 const Checkbox = styled.input`
-  width: 18px;
-  height: 18px;
+  position: absolute;
+  opacity: 0;
+  width: 20px;
+  height: 20px;
   cursor: pointer;
+  z-index: 2;
+`;
+
+const CheckboxCustom = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border: 2px solid ${props => props.checked ? 'var(--primary-blue)' : '#d1d5db'};
+  border-radius: 4px;
+  background-color: ${props => props.checked ? 'var(--primary-blue)' : 'white'};
+  pointer-events: none;
+  transition: all 0.2s;
+
+  &::after {
+    content: '';
+    position: absolute;
+    display: ${props => props.checked ? 'block' : 'none'};
+    left: 6px;
+    top: 2px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
 `;
 
 const TermsLabel = styled.label`

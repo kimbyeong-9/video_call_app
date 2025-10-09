@@ -3,7 +3,6 @@ import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
-import { BsFacebook } from 'react-icons/bs';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -100,15 +99,6 @@ const Login = () => {
             <FcGoogle size={20} />
             Google로 계속하기
           </SocialButton>
-
-          <SocialButton
-            type="button"
-            onClick={() => handleSocialLogin('facebook')}
-            social="facebook"
-          >
-            <BsFacebook size={20} />
-            Facebook으로 계속하기
-          </SocialButton>
         </SocialLoginSection>
 
         <LinksSection>
@@ -167,7 +157,7 @@ const Label = styled.label`
 const Input = styled.input`
   width: 100%;
   padding: 12px 16px;
-  border: 1px solid var(--border-color);
+  border: 2px solid #d1d5db;
   border-radius: 8px;
   font-size: 16px;
   color: var(--text-primary);
@@ -176,6 +166,10 @@ const Input = styled.input`
   &:focus {
     outline: none;
     border-color: var(--primary-blue);
+  }
+
+  &::placeholder {
+    color: #9ca3af;
   }
 `;
 
@@ -195,6 +189,10 @@ const PasswordToggle = styled.button`
   padding: 0;
   display: flex;
   align-items: center;
+
+  &:focus {
+    outline: none;
+  }
 `;
 
 const ErrorMessage = styled.div`

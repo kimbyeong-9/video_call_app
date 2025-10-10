@@ -2,21 +2,23 @@ import React, { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../utils/supabase';
+import { useUnreadMessages } from '../../contexts/UnreadMessagesContext';
 
 const Chatlist = () => {
   const navigate = useNavigate();
   const [chatRooms, setChatRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
+  const { unreadByRoom, markRoomAsRead } = useUnreadMessages();
 
   const loadChatRooms = useCallback(async () => {
     console.log('🔵 loadChatRooms 시작');
-    
+
     try {
       // 현재 사용자 정보 가져오기
       const storedUser = localStorage.getItem('currentUser');
       console.log('🔵 localStorage 사용자 정보:', storedUser);
-      
+
       if (!storedUser) {
         console.log('🔵 사용자 정보 없음');
         setChatRooms([]);
@@ -28,31 +30,89 @@ const Chatlist = () => {
       setCurrentUser(user);
       console.log('🔵 현재 사용자 ID:', user.id);
 
-      // 간단한 테스트: 사용자가 참가한 채팅방만 표시
-      console.log('🔵 간단한 채팅방 목록 생성');
-      
-      const rooms = [
-        {
-          id: '1',
-          nickname: '김병호',
-          profileImage: 'https://api.dicebear.com/7.x/avataaars/svg?seed=kimbungho',
-          lastMessage: '테스트 메시지입니다.',
-          lastMessageDate: new Date().toISOString(),
-          unreadCount: 0
-        },
-        {
-          id: '4', 
-          nickname: '김병구',
-          profileImage: 'https://api.dicebear.com/7.x/avataaars/svg?seed=kimbungu',
-          lastMessage: '안녕하세요!',
-          lastMessageDate: new Date(Date.now() - 3600000).toISOString(),
-          unreadCount: 1
-        }
-      ];
-      
-      console.log('🔵 테스트 채팅방 목록:', rooms);
-      setChatRooms(rooms);
-      
+      // 데이터베이스에서 사용자가 참여한 채팅방 목록 가져오기
+      console.log('🔵 데이터베이스에서 채팅방 목록 조회');
+
+      // 1. 사용자가 메시지를 보내거나 받은 모든 room_id 가져오기
+      const { data: messagesData, error: messagesError } = await supabase
+        .from('messages')
+        .select('room_id, user_id, content, created_at')
+        .order('created_at', { ascending: false });
+
+      if (messagesError) {
+        console.error('❌ 메시지 조회 오류:', messagesError);
+        setChatRooms([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log('🔵 전체 메시지 데이터:', messagesData);
+
+      if (!messagesData || messagesData.length === 0) {
+        console.log('🔵 메시지 없음');
+        setChatRooms([]);
+        setLoading(false);
+        return;
+      }
+
+      // 2. 현재 사용자가 참여한 채팅방 ID 추출 (중복 제거)
+      const roomIds = [...new Set(
+        messagesData
+          .filter(msg => msg.user_id === user.id || messagesData.some(m => m.room_id === msg.room_id && m.user_id !== user.id))
+          .map(msg => msg.room_id)
+      )];
+
+      console.log('🔵 참여 중인 채팅방 ID들:', roomIds);
+
+      // 3. 각 채팅방의 정보 구성
+      const roomsData = await Promise.all(
+        roomIds.map(async (roomId) => {
+          // 해당 채팅방의 모든 메시지
+          const roomMessages = messagesData.filter(msg => msg.room_id === roomId);
+
+          // 마지막 메시지
+          const lastMsg = roomMessages[0];
+
+          // 상대방 ID 찾기 (나를 제외한 사용자)
+          const otherUserIds = [...new Set(
+            roomMessages
+              .map(msg => msg.user_id)
+              .filter(userId => userId !== user.id)
+          )];
+
+          // 상대방이 없으면 (혼자만 메시지 보낸 경우) null 반환
+          if (otherUserIds.length === 0) {
+            return null;
+          }
+
+          // 상대방 정보 가져오기 (첫 번째 상대방)
+          const { data: otherUserData } = await supabase
+            .from('users')
+            .select('id, nickname, email, profile_image')
+            .eq('id', otherUserIds[0])
+            .single();
+
+          if (!otherUserData) {
+            return null;
+          }
+
+          return {
+            id: roomId,
+            nickname: otherUserData.nickname,
+            email: otherUserData.email,
+            profileImage: otherUserData.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherUserData.nickname}`,
+            lastMessage: lastMsg.content,
+            lastMessageDate: lastMsg.created_at
+          };
+        })
+      );
+
+      // null 값 제거
+      const validRooms = roomsData.filter(room => room !== null);
+
+      console.log('🔵 채팅방 목록:', validRooms);
+      setChatRooms(validRooms);
+
     } catch (error) {
       console.error('❌ 채팅방 목록 로드 오류:', error);
       setChatRooms([]);
@@ -68,17 +128,56 @@ const Chatlist = () => {
     loadChatRooms();
   }, [loadChatRooms]);
 
+  // 실시간 메시지 구독
+  useEffect(() => {
+    if (!currentUser) return;
+
+    console.log('🔵 실시간 메시지 구독 설정');
+
+    // 새 메시지가 추가되면 채팅방 목록 업데이트
+    const channel = supabase
+      .channel('realtime:chatlist')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages'
+        },
+        (payload) => {
+          console.log('🔵 새 메시지 수신:', payload.new);
+          // 채팅방 목록 새로고침
+          loadChatRooms();
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔵 Realtime 구독 상태:', status);
+      });
+
+    // 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      console.log('🔵 실시간 구독 해제');
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser, loadChatRooms]);
+
+  const handleChatItemClick = (roomId) => {
+    // 채팅방 입장 시 읽음 처리
+    markRoomAsRead(roomId);
+    navigate(`/chatting/${roomId}`);
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
     const diff = now - date;
-    
+
     // 24시간 이내
     if (diff < 24 * 60 * 60 * 1000) {
-      return date.toLocaleTimeString('ko-KR', { 
-        hour: '2-digit', 
+      return date.toLocaleTimeString('ko-KR', {
+        hour: '2-digit',
         minute: '2-digit',
-        hour12: false 
+        hour12: false
       });
     }
     // 일주일 이내
@@ -116,26 +215,29 @@ const Chatlist = () => {
         </EmptyMessage>
       ) : (
         <ChatList>
-          {chatRooms.map((chat) => (
-            <ChatItem 
-              key={chat.id}
-              onClick={() => navigate(`/chatting/${chat.id}`)}
-            >
-              <ProfileImage src={chat.profileImage} alt={chat.nickname} />
-              <ChatInfo>
-                <ChatHeader>
-                  <Nickname>{chat.nickname}</Nickname>
-                  <LastMessageDate>
-                    {formatDate(chat.lastMessageDate)}
-                  </LastMessageDate>
-                </ChatHeader>
-                <LastMessage>{chat.lastMessage}</LastMessage>
-              </ChatInfo>
-              {chat.unreadCount > 0 && (
-                <UnreadBadge>{chat.unreadCount}</UnreadBadge>
-              )}
-            </ChatItem>
-          ))}
+          {chatRooms.map((chat) => {
+            const unreadCount = unreadByRoom[chat.id] || 0;
+            return (
+              <ChatItem
+                key={chat.id}
+                onClick={() => handleChatItemClick(chat.id)}
+              >
+                <ProfileImage src={chat.profileImage} alt={chat.nickname} />
+                <ChatInfo>
+                  <ChatHeader>
+                    <Nickname>{chat.nickname}</Nickname>
+                    <LastMessageDate>
+                      {formatDate(chat.lastMessageDate)}
+                    </LastMessageDate>
+                  </ChatHeader>
+                  <LastMessage>{chat.lastMessage}</LastMessage>
+                </ChatInfo>
+                {unreadCount > 0 && (
+                  <UnreadBadge>{unreadCount > 99 ? '99+' : unreadCount}</UnreadBadge>
+                )}
+              </ChatItem>
+            );
+          })}
         </ChatList>
       )}
     </ChatlistWrapper>

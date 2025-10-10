@@ -1,15 +1,17 @@
 import React from 'react';
 import styled from 'styled-components';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useUnreadMessages } from '../../contexts/UnreadMessagesContext';
 
 const Footer = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { unreadCount } = useUnreadMessages();
 
   const tabs = [
     { path: '/', label: '홈', icon: '🏠' },
     { path: '/friends', label: '친구목록', icon: '👥' },
-    { path: '/chatlist', label: '채팅', icon: '💬' },
+    { path: '/chatlist', label: '채팅', icon: '💬', showBadge: true },
     { path: '/search', label: '검색', icon: '🔍' },
     { path: '/live', label: 'Live', icon: '📹' }
   ];
@@ -23,7 +25,12 @@ const Footer = () => {
             $isActive={location.pathname === tab.path}
             onClick={() => navigate(tab.path)}
           >
-            <TabIcon>{tab.icon}</TabIcon>
+            <IconWrapper>
+              <TabIcon>{tab.icon}</TabIcon>
+              {tab.showBadge && unreadCount > 0 && (
+                <NotificationBadge>{unreadCount > 99 ? '99+' : unreadCount}</NotificationBadge>
+              )}
+            </IconWrapper>
             <TabLabel $isActive={location.pathname === tab.path}>
               {tab.label}
             </TabLabel>
@@ -76,9 +83,35 @@ const TabItem = styled.div`
   }
 `;
 
+const IconWrapper = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
 const TabIcon = styled.span`
   font-size: 20px;
   margin-bottom: 2px;
+`;
+
+const NotificationBadge = styled.div`
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  background-color: #FF3B30;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 `;
 
 const TabLabel = styled.span`

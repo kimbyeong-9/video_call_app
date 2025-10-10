@@ -8,61 +8,115 @@ const ProtectedRoute = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    checkAuthentication();
-  }, []);
+    let isMounted = true;
+    let timeoutId;
 
-  const checkAuthentication = async () => {
-    try {
-      console.log('🔵 ProtectedRoute - 인증 상태 확인 시작');
-      
-      // 현재 세션 확인
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error('❌ ProtectedRoute - 세션 확인 오류:', error);
-        setIsAuthenticated(false);
-        setIsLoading(false);
-        return;
-      }
+    const checkAuthentication = async () => {
+      try {
+        console.log('🔵 ProtectedRoute - 인증 상태 확인 시작');
 
-      if (session?.user) {
-        console.log('✅ ProtectedRoute - 인증된 사용자:', session.user.email);
-        setIsAuthenticated(true);
-        
-        // localStorage에 사용자 정보가 없으면 업데이트
+        // 1단계: localStorage 먼저 확인 (즉시 체크)
         const storedUser = localStorage.getItem('currentUser');
-        if (!storedUser) {
-          try {
-            const { data: userData } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
+        
+        if (storedUser) {
+          console.log('✅ ProtectedRoute - localStorage에 사용자 정보 있음, 즉시 진입 허용');
+          setIsAuthenticated(true);
+          setIsLoading(false);
 
-            if (userData) {
-              localStorage.setItem('currentUser', JSON.stringify({
-                id: userData.id,
-                email: userData.email,
-                nickname: userData.nickname
-              }));
-              console.log('🔵 ProtectedRoute - localStorage 업데이트 완료');
-            }
-          } catch (userError) {
-            console.error('❌ ProtectedRoute - 사용자 정보 조회 오류:', userError);
-          }
+          // 백그라운드에서 세션 유효성 확인 (비차단)
+          supabase.auth.getSession()
+            .then(({ data: { session }, error }) => {
+              if (isMounted) {
+                if (error || !session?.user) {
+                  console.warn('⚠️ ProtectedRoute - 백그라운드 세션 확인 실패, 로그아웃 필요');
+                  // 세션이 실제로 없으면 로그아웃 처리
+                  localStorage.removeItem('currentUser');
+                  setIsAuthenticated(false);
+                } else {
+                  console.log('✅ ProtectedRoute - 백그라운드 세션 확인 완료');
+                }
+              }
+            })
+            .catch(err => {
+              console.warn('⚠️ ProtectedRoute - 백그라운드 세션 확인 오류 (무시):', err.message);
+            });
+
+          return; // 여기서 종료
         }
-      } else {
-        console.log('❌ ProtectedRoute - 인증되지 않은 사용자');
-        setIsAuthenticated(false);
+
+        // 2단계: localStorage 없으면 Supabase 세션 확인 (타임아웃 포함)
+        console.log('🔵 ProtectedRoute - localStorage 없음, Supabase 세션 확인');
+        
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('세션 확인 타임아웃')), 2000);
+        });
+
+        const sessionPromise = supabase.auth.getSession();
+
+        const { data: { session }, error } = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]);
+
+        if (timeoutId) clearTimeout(timeoutId);
+
+        if (!isMounted) return;
+
+        if (error) {
+          console.warn('⚠️ ProtectedRoute - 세션 확인 오류:', error.message);
+          setIsAuthenticated(false);
+          return;
+        }
+
+        if (session?.user) {
+          console.log('✅ ProtectedRoute - Supabase 세션 확인됨:', session.user.email);
+          setIsAuthenticated(true);
+
+          // 사용자 정보 가져와서 localStorage에 저장
+          supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+            .then(({ data: userData }) => {
+              if (userData && isMounted) {
+                localStorage.setItem('currentUser', JSON.stringify({
+                  id: userData.id,
+                  email: userData.email,
+                  nickname: userData.nickname
+                }));
+                console.log('✅ ProtectedRoute - localStorage 업데이트 완료');
+              }
+            })
+            .catch(userError => {
+              console.warn('⚠️ ProtectedRoute - 사용자 정보 조회 실패 (무시):', userError.message);
+            });
+        } else {
+          console.log('❌ ProtectedRoute - 인증되지 않은 사용자');
+          setIsAuthenticated(false);
+        }
+
+      } catch (error) {
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        console.warn('⚠️ ProtectedRoute - 타임아웃 발생, 로그인 필요');
+        if (isMounted) {
+          setIsAuthenticated(false);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
-      
-    } catch (error) {
-      console.error('❌ ProtectedRoute - 인증 확인 예외:', error);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+
+    checkAuthentication();
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
 
   // 로딩 중일 때
   if (isLoading) {

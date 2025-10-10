@@ -2,6 +2,7 @@ import React, { useEffect, useState, createContext } from 'react';
 import Router from './routes/Router';
 import styled from 'styled-components';
 import { handleAuthStateChange, supabase } from './utils/supabase';
+import { UnreadMessagesProvider } from './contexts/UnreadMessagesContext';
 
 // Context 생성: 현재 사용자 ID를 전역으로 공유
 export const CurrentUserContext = createContext(null);
@@ -28,31 +29,39 @@ function App() {
         if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
           console.log('🔵 App.jsx - 로그인 성공 감지, 사용자 정보 업데이트');
 
-          try {
-            // 사용자 추가 정보 가져오기
-            const { data: userData, error: userError } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
+          // 먼저 기본 정보로 빠르게 저장
+          const basicSession = {
+            id: session.user.id,
+            email: session.user.email,
+            nickname: session.user.email?.split('@')[0] || '사용자'
+          };
+          localStorage.setItem('currentUser', JSON.stringify(basicSession));
+          setCurrentUserId(session.user.id);
+          console.log('✅ App.jsx - 기본 정보 저장 완료 (즉시)');
 
-            if (userData && !userError) {
-              // localStorage에 사용자 정보 저장
-              const userSession = {
-                id: userData.id,
-                email: userData.email,
-                nickname: userData.nickname
-              };
-
-              localStorage.setItem('currentUser', JSON.stringify(userSession));
-              setCurrentUserId(userData.id);
-              console.log('🔵 App.jsx - localStorage 업데이트 완료:', userSession);
-            } else {
-              console.error('🔵 App.jsx - 사용자 정보 조회 실패:', userError);
-            }
-          } catch (error) {
-            console.error('🔵 App.jsx - 사용자 정보 업데이트 오류:', error);
-          }
+          // 백그라운드에서 상세 정보 가져오기 (비차단)
+          supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+            .then(({ data: userData, error: userError }) => {
+              if (userData && !userError) {
+                const userSession = {
+                  id: userData.id,
+                  email: userData.email,
+                  nickname: userData.nickname
+                };
+                localStorage.setItem('currentUser', JSON.stringify(userSession));
+                setCurrentUserId(userData.id);
+                console.log('✅ App.jsx - 상세 정보 업데이트 완료 (백그라운드)');
+              } else {
+                console.warn('⚠️ App.jsx - 상세 정보 조회 실패, 기본 정보 유지');
+              }
+            })
+            .catch(error => {
+              console.warn('⚠️ App.jsx - 상세 정보 조회 오류, 기본 정보 유지:', error.message);
+            });
         }
       });
 
@@ -73,9 +82,11 @@ function App() {
 
   return (
     <CurrentUserContext.Provider value={currentUserId}>
-      <AppContainer>
-        <Router />
-      </AppContainer>
+      <UnreadMessagesProvider>
+        <AppContainer>
+          <Router />
+        </AppContainer>
+      </UnreadMessagesProvider>
     </CurrentUserContext.Provider>
   );
 }

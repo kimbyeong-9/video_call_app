@@ -21,15 +21,40 @@ const Login = () => {
 
   // 이미 로그인된 사용자인지 확인
   useEffect(() => {
+    let timeoutId;
+    
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        console.log('🔵 Login - 이미 로그인된 사용자, 홈으로 이동');
-        navigate('/', { replace: true });
+      try {
+        // 타임아웃 설정 (1초)
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('세션 확인 타임아웃')), 1000);
+        });
+
+        const sessionPromise = supabase.auth.getSession();
+
+        const { data: { session } } = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]);
+
+        if (timeoutId) clearTimeout(timeoutId);
+
+        if (session?.user) {
+          console.log('🔵 Login - 이미 로그인된 사용자, 홈으로 이동');
+          navigate('/', { replace: true });
+        }
+      } catch (error) {
+        if (timeoutId) clearTimeout(timeoutId);
+        console.log('⚠️ Login - 세션 확인 타임아웃 또는 오류, 로그인 페이지 유지:', error.message);
+        // 타임아웃이면 그냥 로그인 페이지를 보여줌 (사용자가 로그인할 수 있도록)
       }
     };
     
     checkAuth();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [navigate]);
 
   const handleInputChange = (e) => {

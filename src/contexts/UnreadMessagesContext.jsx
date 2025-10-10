@@ -1,0 +1,208 @@
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { supabase } from '../utils/supabase';
+
+const UnreadMessagesContext = createContext();
+
+export const useUnreadMessages = () => {
+  const context = useContext(UnreadMessagesContext);
+  if (!context) {
+    throw new Error('useUnreadMessages must be used within UnreadMessagesProvider');
+  }
+  return context;
+};
+
+export const UnreadMessagesProvider = ({ children }) => {
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadByRoom, setUnreadByRoom] = useState({});
+  const [currentUser, setCurrentUser] = useState(null);
+  const [lastReadTimes, setLastReadTimes] = useState({});
+
+  // localStorage에서 마지막 읽은 시간 불러오기
+  const loadLastReadTimes = useCallback((userId) => {
+    const storedLastReadTimes = localStorage.getItem(`lastReadTimes_${userId}`);
+    if (storedLastReadTimes) {
+      return JSON.parse(storedLastReadTimes);
+    }
+    return {};
+  }, []);
+
+  // localStorage에 마지막 읽은 시간 저장하기
+  const saveLastReadTimes = useCallback((userId, times) => {
+    localStorage.setItem(`lastReadTimes_${userId}`, JSON.stringify(times));
+  }, []);
+
+  // 현재 사용자 정보 가져오기
+  useEffect(() => {
+    const getUserInfo = async () => {
+      const storedUser = localStorage.getItem('currentUser');
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        setCurrentUser(user);
+
+        // localStorage에서 마지막 읽은 시간 불러오기
+        const times = loadLastReadTimes(user.id);
+        setLastReadTimes(times);
+      }
+    };
+    getUserInfo();
+  }, [loadLastReadTimes]);
+
+  // 읽지 않은 메시지 개수 계산
+  const calculateUnreadMessages = useCallback(async () => {
+    if (!currentUser) return;
+
+    try {
+      console.log('🔵 읽지 않은 메시지 계산 시작');
+
+      // localStorage에서 최신 마지막 읽은 시간 불러오기
+      const currentLastReadTimes = loadLastReadTimes(currentUser.id);
+      console.log('🔵 마지막 읽은 시간들:', currentLastReadTimes);
+
+      // 1. 모든 메시지 가져오기
+      const { data: messagesData, error } = await supabase
+        .from('messages')
+        .select('id, room_id, user_id, created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ 메시지 조회 오류:', error);
+        return;
+      }
+
+      if (!messagesData || messagesData.length === 0) {
+        setUnreadCount(0);
+        setUnreadByRoom({});
+        return;
+      }
+
+      // 2. 현재 사용자가 참여한 채팅방 찾기
+      const userRoomIds = [...new Set(
+        messagesData
+          .filter(msg =>
+            msg.user_id === currentUser.id ||
+            messagesData.some(m => m.room_id === msg.room_id && m.user_id !== currentUser.id)
+          )
+          .map(msg => msg.room_id)
+      )];
+
+      console.log('🔵 참여 중인 채팅방:', userRoomIds);
+
+      // 3. 각 채팅방별 읽지 않은 메시지 개수 계산 (마지막 읽은 시간 이후만)
+      const unreadByRoomData = {};
+      let totalUnread = 0;
+
+      for (const roomId of userRoomIds) {
+        // 해당 채팅방의 메시지
+        const roomMessages = messagesData.filter(msg => msg.room_id === roomId);
+
+        // 마지막 읽은 시간
+        const lastReadTime = currentLastReadTimes[roomId] || 0;
+
+        // 상대방이 보낸 메시지 중 마지막 읽은 시간 이후의 메시지만
+        const unreadMessages = roomMessages.filter(msg => {
+          const messageTime = new Date(msg.created_at).getTime();
+          return msg.user_id !== currentUser.id && messageTime > lastReadTime;
+        });
+
+        console.log(`🔵 채팅방 ${roomId}: 마지막 읽은 시간 ${new Date(lastReadTime).toISOString()}, 읽지 않은 메시지 ${unreadMessages.length}개`);
+
+        if (unreadMessages.length > 0) {
+          unreadByRoomData[roomId] = unreadMessages.length;
+          totalUnread += unreadMessages.length;
+        }
+      }
+
+      console.log('🔵 채팅방별 읽지 않은 메시지:', unreadByRoomData);
+      console.log('🔵 전체 읽지 않은 메시지:', totalUnread);
+
+      setUnreadByRoom(unreadByRoomData);
+      setUnreadCount(totalUnread);
+
+    } catch (error) {
+      console.error('❌ 읽지 않은 메시지 계산 오류:', error);
+    }
+  }, [currentUser, loadLastReadTimes]);
+
+  // 특정 채팅방의 메시지를 읽음 처리
+  const markRoomAsRead = useCallback((roomId) => {
+    if (!currentUser) return;
+
+    console.log('🔵 채팅방 읽음 처리:', roomId);
+
+    // 현재 시간을 마지막 읽은 시간으로 저장
+    const currentTime = Date.now();
+    const updatedTimes = {
+      ...loadLastReadTimes(currentUser.id),
+      [roomId]: currentTime
+    };
+
+    // localStorage에 저장
+    saveLastReadTimes(currentUser.id, updatedTimes);
+    setLastReadTimes(updatedTimes);
+
+    console.log(`🔵 채팅방 ${roomId}의 마지막 읽은 시간 업데이트: ${new Date(currentTime).toISOString()}`);
+
+    // UI 즉시 업데이트
+    setUnreadByRoom(prev => {
+      const updated = { ...prev };
+      const roomUnread = updated[roomId] || 0;
+
+      // 전체 카운트에서 해당 방의 읽지 않은 메시지 수 빼기
+      setUnreadCount(prevCount => Math.max(0, prevCount - roomUnread));
+
+      // 해당 방의 읽지 않은 메시지 제거
+      delete updated[roomId];
+      return updated;
+    });
+  }, [currentUser, loadLastReadTimes, saveLastReadTimes]);
+
+  // 실시간 메시지 구독
+  useEffect(() => {
+    if (!currentUser) return;
+
+    console.log('🔵 실시간 메시지 구독 설정 (UnreadMessagesContext)');
+
+    const channel = supabase
+      .channel('realtime:unread-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages'
+        },
+        (payload) => {
+          console.log('🔵 새 메시지 수신 (UnreadMessagesContext):', payload.new);
+
+          // 내가 보낸 메시지가 아닌 경우에만 카운트 증가
+          if (payload.new.user_id !== currentUser.id) {
+            calculateUnreadMessages();
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔵 Realtime 구독 상태 (UnreadMessagesContext):', status);
+      });
+
+    // 초기 로드
+    calculateUnreadMessages();
+
+    return () => {
+      console.log('🔵 실시간 구독 해제 (UnreadMessagesContext)');
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser, calculateUnreadMessages]);
+
+  const value = {
+    unreadCount,
+    unreadByRoom,
+    markRoomAsRead,
+    refreshUnreadCount: calculateUnreadMessages
+  };
+
+  return (
+    <UnreadMessagesContext.Provider value={value}>
+      {children}
+    </UnreadMessagesContext.Provider>
+  );
+};

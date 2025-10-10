@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { supabase } from '../../utils/supabase';
+import { useUnreadMessages } from '../../contexts/UnreadMessagesContext';
 
 const Chatting = () => {
   const { roomId } = useParams();
@@ -12,11 +13,14 @@ const Chatting = () => {
   const [loading, setLoading] = useState(true);
   const [participants, setParticipants] = useState([]);
   const chatContentRef = useRef(null);
+  const { markRoomAsRead } = useUnreadMessages();
 
   // 1️⃣ 페이지 진입 시 사용자 정보 가져오기 & 기존 메시지 불러오기
   useEffect(() => {
     console.log('🔵 useEffect 실행, roomId:', roomId);
     initializeChat();
+    // 채팅방 입장 시 읽음 처리
+    markRoomAsRead(roomId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 

@@ -143,7 +143,7 @@ const Search = () => {
         {isRecommendOpen && (
           <RecommendContent>
             {recommendedUsers.map(user => (
-              <FriendItem key={user.id} onClick={() => navigate(`/profiles/${user.id}`)}>
+              <UserCard key={user.id} onClick={() => navigate(`/profiles/${user.id}`)}>
                 <ProfileSection>
                   <ProfileImage 
                     src={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`} 
@@ -152,43 +152,31 @@ const Search = () => {
                   <OnlineIndicator />
                 </ProfileSection>
                 
-                <FriendInfo>
-                  <FriendHeader>
+                <UserInfo>
+                  <UserHeader>
                     <Nickname>{user.nickname}</Nickname>
-                    <Age>{user.email}</Age>
-                  </FriendHeader>
-                  
-                  <Details>
-                    <DetailItem>
-                      <DetailLabel>가입일</DetailLabel>
-                      <DetailValue>{new Date(user.created_at).toLocaleDateString()}</DetailValue>
-                    </DetailItem>
-                    
-                    <DetailItem>
-                      <DetailLabel>이메일</DetailLabel>
-                      <DetailValue>{user.email}</DetailValue>
-                    </DetailItem>
-                  </Details>
+                    <JoinDate>{new Date(user.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} 가입</JoinDate>
+                  </UserHeader>
                   
                   {user.bio && (
                     <Bio>{user.bio}</Bio>
                   )}
                   
                   {user.interests && user.interests.length > 0 && (
-                    <Interests>
-                      <InterestLabel>관심사</InterestLabel>
-                      <InterestTags>
-                        {Array.isArray(user.interests) 
-                          ? user.interests.map((interest, index) => (
-                              <InterestTag key={index}>{interest}</InterestTag>
-                            ))
-                          : <InterestTag>관심사 없음</InterestTag>
-                        }
-                      </InterestTags>
-                    </Interests>
+                    <InterestTags>
+                      {Array.isArray(user.interests) 
+                        ? user.interests.slice(0, 3).map((interest, index) => (
+                            <InterestTag key={index}>{interest}</InterestTag>
+                          ))
+                        : null
+                      }
+                      {user.interests.length > 3 && (
+                        <InterestTag>+{user.interests.length - 3}</InterestTag>
+                      )}
+                    </InterestTags>
                   )}
-                </FriendInfo>
-              </FriendItem>
+                </UserInfo>
+              </UserCard>
             ))}
           </RecommendContent>
         )}
@@ -201,7 +189,7 @@ const Search = () => {
             <LoadingMessage>검색 중...</LoadingMessage>
           ) : searchResults.length > 0 ? (
             searchResults.map(user => (
-              <FriendItem key={user.id} onClick={() => navigate(`/profiles/${user.id}`)}>
+              <UserCard key={user.id} onClick={() => navigate(`/profiles/${user.id}`)}>
                 <ProfileSection>
                   <ProfileImage 
                     src={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`} 
@@ -210,43 +198,31 @@ const Search = () => {
                   <OnlineIndicator />
                 </ProfileSection>
                 
-                <FriendInfo>
-                  <FriendHeader>
+                <UserInfo>
+                  <UserHeader>
                     <Nickname>{user.nickname}</Nickname>
-                    <Age>{user.email}</Age>
-                  </FriendHeader>
-                  
-                  <Details>
-                    <DetailItem>
-                      <DetailLabel>가입일</DetailLabel>
-                      <DetailValue>{new Date(user.created_at).toLocaleDateString()}</DetailValue>
-                    </DetailItem>
-                    
-                    <DetailItem>
-                      <DetailLabel>이메일</DetailLabel>
-                      <DetailValue>{user.email}</DetailValue>
-                    </DetailItem>
-                  </Details>
+                    <JoinDate>{new Date(user.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} 가입</JoinDate>
+                  </UserHeader>
                   
                   {user.bio && (
                     <Bio>{user.bio}</Bio>
                   )}
                   
                   {user.interests && user.interests.length > 0 && (
-                    <Interests>
-                      <InterestLabel>관심사</InterestLabel>
-                      <InterestTags>
-                        {Array.isArray(user.interests) 
-                          ? user.interests.map((interest, index) => (
-                              <InterestTag key={index}>{interest}</InterestTag>
-                            ))
-                          : <InterestTag>관심사 없음</InterestTag>
-                        }
-                      </InterestTags>
-                    </Interests>
+                    <InterestTags>
+                      {Array.isArray(user.interests) 
+                        ? user.interests.slice(0, 3).map((interest, index) => (
+                            <InterestTag key={index}>{interest}</InterestTag>
+                          ))
+                        : null
+                      }
+                      {user.interests.length > 3 && (
+                        <InterestTag>+{user.interests.length - 3}</InterestTag>
+                      )}
+                    </InterestTags>
                   )}
-                </FriendInfo>
-              </FriendItem>
+                </UserInfo>
+              </UserCard>
             ))
           ) : (
             <NoResultsMessage>검색 결과가 없습니다.</NoResultsMessage>
@@ -296,27 +272,33 @@ const SearchButton = styled.button`
 `;
 
 const RecommendSection = styled.div`
-  background: var(--bg-card);
-  border-radius: 12px;
+  background: white;
+  border-radius: 16px;
   overflow: hidden;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 20px rgba(43, 87, 154, 0.1);
+  margin-bottom: 24px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid #f0f0f0;
 `;
 
 const RecommendHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 16px 20px;
   cursor: pointer;
-  background-color: var(--bg-card);
-  border-bottom: 1px solid var(--border-color);
+  background-color: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s ease;
+  
+  &:hover {
+    background-color: #f5f5f5;
+  }
   
   h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #333;
   }
 `;
 
@@ -326,23 +308,40 @@ const RecommendContent = styled.div`
 `;
 
 const SearchResults = styled.div`
-  margin-top: 20px;
+  margin-top: 24px;
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid #f0f0f0;
   
   h3 {
-    margin-bottom: 16px;
-    font-size: 16px;
+    margin: 0;
+    padding: 16px 20px;
+    font-size: 18px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #333;
+    background-color: #fafafa;
+    border-bottom: 1px solid #f0f0f0;
   }
 `;
 
-const FriendItem = styled.div`
+const UserCard = styled.div`
   display: flex;
-  align-items: flex-start;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-card);
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  background: white;
   cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: #f8f9fa;
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
 `;
 
 const ProfileSection = styled.div`
@@ -351,121 +350,91 @@ const ProfileSection = styled.div`
 `;
 
 const ProfileImage = styled.img`
-  width: 48px;
-  height: 48px;
-  border-radius: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 28px;
   object-fit: cover;
-  border: 2px solid var(--primary-light-blue);
+  border: 3px solid #e3f2fd;
 `;
 
 const OnlineIndicator = styled.div`
   position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 12px;
-  height: 12px;
+  bottom: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
   background-color: #4CAF50;
-  border: 2px solid #ffffff;
+  border: 3px solid #ffffff;
   border-radius: 50%;
 `;
 
-const FriendInfo = styled.div`
+const UserInfo = styled.div`
   flex: 1;
   min-width: 0;
 `;
 
-const FriendHeader = styled.div`
+const UserHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 `;
 
 const Nickname = styled.h3`
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: #333;
   margin: 0;
 `;
 
-const Age = styled.span`
+const JoinDate = styled.span`
   font-size: 12px;
-  color: var(--primary-blue);
-  background-color: var(--primary-light-blue);
-  padding: 2px 8px;
+  color: #888;
+  background-color: #f5f5f5;
+  padding: 4px 8px;
   border-radius: 12px;
-  font-weight: 500;
-`;
-
-const Details = styled.div`
-  display: flex;
-  gap: 12px;
-  margin-bottom: 4px;
-`;
-
-const DetailItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 4px;
-`;
-
-const DetailLabel = styled.span`
-  font-size: 12px;
-  color: var(--text-light);
-`;
-
-const DetailValue = styled.span`
-  font-size: 12px;
-  color: var(--text-secondary);
-`;
-
-const Interests = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-`;
-
-const InterestLabel = styled.span`
-  font-size: 12px;
-  color: var(--text-light);
-  margin-right: 4px;
 `;
 
 const InterestTags = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
+  margin-top: 8px;
 `;
 
 const InterestTag = styled.span`
-  font-size: 11px;
-  color: var(--primary-blue);
-  background-color: var(--accent-blue);
-  padding: 2px 8px;
-  border-radius: 12px;
+  font-size: 12px;
+  color: #1976d2;
+  background-color: #e3f2fd;
+  padding: 4px 10px;
+  border-radius: 16px;
   font-weight: 500;
+  border: 1px solid #bbdefb;
 `;
 
 const LoadingMessage = styled.div`
   text-align: center;
-  padding: 20px;
-  color: var(--text-secondary);
+  padding: 40px 20px;
+  color: #666;
   font-size: 16px;
 `;
 
 const NoResultsMessage = styled.div`
   text-align: center;
-  padding: 20px;
-  color: var(--text-secondary);
+  padding: 40px 20px;
+  color: #666;
   font-size: 16px;
 `;
 
 const Bio = styled.p`
-  color: var(--text-secondary);
+  color: #666;
   font-size: 14px;
-  line-height: 1.4;
-  margin: 8px 0;
+  line-height: 1.5;
+  margin: 6px 0 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 `;
 
 export default Search;

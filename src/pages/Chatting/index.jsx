@@ -12,6 +12,7 @@ const Chatting = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [participants, setParticipants] = useState([]);
+  const [otherUser, setOtherUser] = useState(null);
   const chatContentRef = useRef(null);
   const { markRoomAsRead } = useUnreadMessages();
 
@@ -190,23 +191,37 @@ const Chatting = () => {
 
       // 2. 각 메시지의 사용자 정보 가져오기 (간소화)
       const messagesWithSender = [];
-      
+      const userCache = {};
+
       for (const msg of messagesData) {
         try {
           console.log(`🔵 메시지 ${msg.id}의 사용자 정보 조회:`, msg.user_id);
-          
-          const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('id, nickname, email')
-            .eq('id', msg.user_id)
-            .single();
 
-          console.log(`🔵 사용자 정보 조회 결과:`, { userData, userError });
+          // 캐시에 이미 있으면 재사용
+          let userData = userCache[msg.user_id];
+          if (!userData) {
+            const { data, error: userError } = await supabase
+              .from('users')
+              .select('id, nickname, email, profile_image')
+              .eq('id', msg.user_id)
+              .single();
+
+            console.log(`🔵 사용자 정보 조회 결과:`, { data, userError });
+            userData = data;
+            if (userData) {
+              userCache[msg.user_id] = userData;
+            }
+          }
 
           messagesWithSender.push({
             ...msg,
             sender: userData || null
           });
+
+          // 상대방 정보 저장 (내가 아닌 사용자)
+          if (userData && userData.id !== currentUser?.id && !otherUser) {
+            setOtherUser(userData);
+          }
         } catch (error) {
           console.error(`❌ 메시지 ${msg.id} 사용자 정보 조회 오류:`, error);
           messagesWithSender.push({
@@ -215,7 +230,7 @@ const Chatting = () => {
           });
         }
       }
-      
+
       console.log('🔵 최종 메시지 목록:', messagesWithSender);
       setMessages(messagesWithSender);
       console.log('🔵 setMessages 완료, 메시지 개수:', messagesWithSender.length);
@@ -311,29 +326,53 @@ const Chatting = () => {
     <ChattingContainer>
       <ChatHeader>
         <BackButton onClick={() => navigate(-1)}>←</BackButton>
-        <RoomInfo>
-          <RoomTitle>채팅방 {roomId}</RoomTitle>
-          <ParticipantCount>
-            {currentUser ? '로그인됨' : '로그인 필요'}
-          </ParticipantCount>
-        </RoomInfo>
+        <RoomTitle>{otherUser?.nickname || `채팅방 ${roomId}`}</RoomTitle>
+        <HeaderSpacer />
       </ChatHeader>
-      
+
       <ChatContent ref={chatContentRef}>
         {messages.length === 0 ? (
           <EmptyMessage>메시지가 없습니다. 첫 메시지를 보내보세요!</EmptyMessage>
         ) : (
-          messages.map((msg) => {
+          messages.map((msg, index) => {
             const isOwn = msg.user_id === currentUser?.id;
             const senderName = msg.sender?.nickname || msg.sender?.email?.split('@')[0] || '익명';
-            
+            const senderImage = msg.sender?.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${senderName}`;
+
+            // 이전 메시지와 비교하여 같은 분 단위인지 확인
+            const prevMsg = index > 0 ? messages[index - 1] : null;
+            const showProfile = !isOwn && (!prevMsg ||
+              prevMsg.user_id !== msg.user_id ||
+              formatTime(prevMsg.created_at) !== formatTime(msg.created_at) ||
+              prevMsg.user_id === currentUser?.id
+            );
+
             return (
               <MessageWrapper key={msg.id} $isOwn={isOwn}>
-                {!isOwn && <SenderName>{senderName}</SenderName>}
-                <MessageBubble $isOwn={isOwn} title={formatFullTime(msg.created_at)}>
-                  <MessageContent>{msg.content}</MessageContent>
-                  <MessageTime>{formatTime(msg.created_at)}</MessageTime>
-                </MessageBubble>
+                {!isOwn && (
+                  <MessageGroup>
+                    {showProfile ? (
+                      <ProfileImageWrapper>
+                        <ProfileImage src={senderImage} alt={senderName} />
+                      </ProfileImageWrapper>
+                    ) : (
+                      <ProfileImagePlaceholder />
+                    )}
+                    <MessageContent>
+                      {showProfile && <SenderName>{senderName}</SenderName>}
+                      <MessageBubble $isOwn={isOwn} title={formatFullTime(msg.created_at)}>
+                        <MessageText>{msg.content}</MessageText>
+                        <MessageTime>{formatTime(msg.created_at)}</MessageTime>
+                      </MessageBubble>
+                    </MessageContent>
+                  </MessageGroup>
+                )}
+                {isOwn && (
+                  <MessageBubble $isOwn={isOwn} title={formatFullTime(msg.created_at)}>
+                    <MessageText>{msg.content}</MessageText>
+                    <MessageTime>{formatTime(msg.created_at)}</MessageTime>
+                  </MessageBubble>
+                )}
               </MessageWrapper>
             );
           })
@@ -379,25 +418,18 @@ const BackButton = styled.button`
   font-size: 24px;
   cursor: pointer;
   padding: 8px;
-  margin-right: 8px;
-`;
-
-const RoomInfo = styled.div`
-  display: flex;
-  flex-direction: column;
-  flex: 1;
 `;
 
 const RoomTitle = styled.h1`
   font-size: 1.2rem;
   font-weight: 600;
   margin: 0;
+  flex: 1;
+  text-align: center;
 `;
 
-const ParticipantCount = styled.span`
-  font-size: 0.8rem;
-  color: #666;
-  margin-top: 2px;
+const HeaderSpacer = styled.div`
+  width: 40px;
 `;
 
 const ChatContent = styled.div`
@@ -432,18 +464,48 @@ const MessageWrapper = styled.div`
   display: flex;
   flex-direction: column;
   align-items: ${props => props.$isOwn ? 'flex-end' : 'flex-start'};
+  margin-bottom: 4px;
+`;
+
+const MessageGroup = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 80%;
+`;
+
+const ProfileImageWrapper = styled.div`
+  flex-shrink: 0;
+`;
+
+const ProfileImage = styled.img`
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #e0e0e0;
+`;
+
+const ProfileImagePlaceholder = styled.div`
+  width: 36px;
+  flex-shrink: 0;
+`;
+
+const MessageContent = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 `;
 
 const SenderName = styled.span`
   font-size: 12px;
   color: var(--text-light, #666);
-  margin-bottom: 4px;
   margin-left: 8px;
   font-weight: 500;
 `;
 
 const MessageBubble = styled.div`
-  max-width: 70%;
+  max-width: 100%;
   padding: 12px 16px;
   border-radius: ${props => props.$isOwn ? '20px 20px 4px 20px' : '20px 20px 20px 4px'};
   background-color: ${props => props.$isOwn ? '#007aff' : '#ffffff'};
@@ -451,7 +513,7 @@ const MessageBubble = styled.div`
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 `;
 
-const MessageContent = styled.p`
+const MessageText = styled.p`
   margin: 0;
   font-size: 15px;
   line-height: 1.4;

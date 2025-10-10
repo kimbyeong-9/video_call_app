@@ -329,7 +329,7 @@ const LastMessage = styled.p`
 
 const UnreadBadge = styled.div`
   position: absolute;
-  top: 50%;
+  top: 65%;
   right: 12px;
   transform: translateY(-50%);
   background-color: #007AFF;

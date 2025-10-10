@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, useRoutes, Navigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import ChattingLayout from '../components/layout/ChattingLayout';
+import ProtectedRoute from '../components/common/ProtectedRoute';
 
 // Pages
 import Home from '../pages/Home';
@@ -17,6 +18,9 @@ import Live from '../pages/Live';
 import Mypage from '../pages/Profiles/Mypage';
 import UserProfile from '../pages/Profiles/UserProfile';
 import EditProfile from '../pages/Profiles/EditProfile';
+import Notices from '../pages/Notices';
+import Terms from '../pages/Terms';
+import Settings from '../pages/Settings';
 
 const AppRoutes = () => {
   const routes = useRoutes([
@@ -38,12 +42,16 @@ const AppRoutes = () => {
       element: <Auth />
     },
 
-    // Chatting Routes (No Header/Footer)
+    // Protected Chatting Routes (No Header/Footer)
     {
-      element: <ChattingLayout />,
+      element: (
+        <ProtectedRoute>
+          <ChattingLayout />
+        </ProtectedRoute>
+      ),
       children: [
         {
-          path: 'chat/:roomId',
+          path: 'chatting/:roomId',
           element: <Chatting />
         }
       ]
@@ -51,7 +59,11 @@ const AppRoutes = () => {
 
     // Protected Routes with Layout
     {
-      element: <MainLayout />,
+      element: (
+        <ProtectedRoute>
+          <MainLayout />
+        </ProtectedRoute>
+      ),
       children: [
         {
           path: '/',
@@ -84,6 +96,18 @@ const AppRoutes = () => {
         {
           path: 'profiles/:userId',
           element: <UserProfile />
+        },
+        {
+          path: 'notices',
+          element: <Notices />
+        },
+        {
+          path: 'terms',
+          element: <Terms />
+        },
+        {
+          path: 'settings',
+          element: <Settings />
         }
       ]
     },

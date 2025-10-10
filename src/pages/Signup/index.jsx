@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
@@ -37,6 +37,19 @@ const Signup = () => {
     message: '',
     type: 'success'
   });
+
+  // 이미 로그인된 사용자인지 확인
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        console.log('🔵 Signup - 이미 로그인된 사용자, 홈으로 이동');
+        navigate('/', { replace: true });
+      }
+    };
+    
+    checkAuth();
+  }, [navigate]);
 
   const validateEmail = (email) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

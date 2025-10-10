@@ -1,27 +1,142 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { supabase } from '../../utils/supabase';
 import { friendsData } from '../../data/FriendsData';
 import { FiMessageCircle, FiHeart } from 'react-icons/fi';
 
 const UserProfile = () => {
   const { userId } = useParams();
+  const navigate = useNavigate();
   const [userData, setUserData] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [isLiked, setIsLiked] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const user = friendsData.find(user => user.id === Number(userId));
-    if (user) {
-      setUserData(user);
-    }
+    loadUserProfile();
   }, [userId]);
 
-  if (!userData) {
-    console.log('Current userId:', userId);
-    console.log('Available users:', friendsData);
+  const loadUserProfile = async () => {
+    try {
+      console.log('🔵 UserProfile - 사용자 프로필 로드 시작, userId:', userId);
+      
+      // 현재 로그인한 사용자 정보 가져오기
+      const storedUser = localStorage.getItem('currentUser');
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        setCurrentUser(parsedUser);
+        console.log('🔵 UserProfile - 현재 사용자:', parsedUser);
+      }
+
+      // userId가 숫자인 경우 처리 (기존 하드코딩된 데이터와의 호환성)
+      if (!isNaN(userId)) {
+        console.log('🔵 UserProfile - 숫자 ID 감지, 하드코딩된 데이터 사용');
+        // 기존 하드코딩된 데이터에서 사용자 찾기
+        const hardcodedUser = friendsData.find(user => user.id === Number(userId));
+        if (hardcodedUser) {
+          setUserData(hardcodedUser);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // UUID 형식인지 확인
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(userId)) {
+        console.error('❌ UserProfile - 유효하지 않은 UUID 형식:', userId);
+        setLoading(false);
+        return;
+      }
+
+      // 프로필 조회 대상 사용자 정보 가져오기
+      const { data: profileUser, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      console.log('🔵 UserProfile - 프로필 사용자 조회 결과:', { profileUser, error });
+
+      if (error) {
+        console.error('❌ UserProfile - 사용자 조회 오류:', error);
+        throw error;
+      }
+
+      if (!profileUser) {
+        console.error('❌ UserProfile - 사용자를 찾을 수 없음');
+        return;
+      }
+
+      setUserData(profileUser);
+    } catch (error) {
+      console.error('❌ UserProfile - 프로필 로드 오류:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMessageClick = async () => {
+    try {
+      console.log('🔵 UserProfile - 메시지 버튼 클릭');
+      
+      if (!currentUser) {
+        alert('로그인이 필요합니다.');
+        navigate('/login');
+        return;
+      }
+
+      if (!userData) {
+        alert('사용자 정보를 찾을 수 없습니다.');
+        return;
+      }
+
+      // 자신과의 채팅은 불가능
+      if (currentUser.id === userData.id) {
+        alert('자신에게는 메시지를 보낼 수 없습니다.');
+        return;
+      }
+
+      // 숫자 ID인 경우 (하드코딩된 데이터) - 채팅 불가능 안내
+      if (!isNaN(userId)) {
+        alert('이 사용자는 테스트용 데이터입니다. 실제 채팅 기능을 테스트하려면 Supabase에 등록된 사용자 프로필을 사용해주세요.');
+        return;
+      }
+
+      console.log('🔵 UserProfile - 채팅방 생성/찾기 시작');
+      
+      // 간단한 채팅방 ID 생성 (두 사용자 ID를 조합)
+      const sortedIds = [currentUser.id, userData.id].sort();
+      const chatRoomId = `chat_${sortedIds[0]}_${sortedIds[1]}`;
+      
+      console.log('🔵 UserProfile - 채팅방 ID:', chatRoomId);
+      console.log('🔵 UserProfile - 참여자:', {
+        currentUser: currentUser.nickname || currentUser.email,
+        targetUser: userData.nickname || userData.email
+      });
+
+      // 채팅 페이지로 이동
+      console.log('🔵 UserProfile - 채팅 페이지로 이동:', `/chatting/${chatRoomId}`);
+      navigate(`/chatting/${chatRoomId}`);
+      
+    } catch (error) {
+      console.error('❌ UserProfile - 메시지 버튼 클릭 오류:', error);
+      alert('메시지를 시작하는 중 오류가 발생했습니다.');
+    }
+  };
+
+  if (loading) {
     return (
       <LoadingWrapper>
         <LoadingText>프로필을 불러오는 중...</LoadingText>
+      </LoadingWrapper>
+    );
+  }
+
+  if (!userData) {
+    return (
+      <LoadingWrapper>
+        <LoadingText>사용자를 찾을 수 없습니다.</LoadingText>
       </LoadingWrapper>
     );
   }
@@ -34,8 +149,11 @@ const UserProfile = () => {
 
       <ProfileContent>
         <ProfileImageSection>
-          <ProfileImage src={userData.profileImage} alt="프로필" />
-          {userData.isOnline && <OnlineIndicator />}
+          <ProfileImage 
+            src={userData.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userData.nickname}`} 
+            alt="프로필" 
+          />
+          <OnlineIndicator />
         </ProfileImageSection>
 
         <ProfileInfo>
@@ -44,7 +162,7 @@ const UserProfile = () => {
         </ProfileInfo>
 
         <ActionButtons>
-          <ActionButton onClick={() => window.location.href = `/chat/${userData.id}`}>
+          <ActionButton onClick={handleMessageClick}>
             <FiMessageCircle size={20} />
             <span>메시지</span>
           </ActionButton>
@@ -57,29 +175,32 @@ const UserProfile = () => {
           </ActionButton>
         </ActionButtons>
 
-        <InterestsSection>
-          <SectionTitle>관심사</SectionTitle>
-          <InterestsList>
-            {userData.interests.map((interest, index) => (
-              <InterestItem key={index}>
-                <InterestName>{interest}</InterestName>
-              </InterestItem>
-            ))}
-          </InterestsList>
-        </InterestsSection>
+        {userData.interests && userData.interests.length > 0 && (
+          <InterestsSection>
+            <SectionTitle>관심사</SectionTitle>
+            <InterestsList>
+              {Array.isArray(userData.interests) 
+                ? userData.interests.map((interest, index) => (
+                    <InterestItem key={index}>
+                      <InterestName>{interest}</InterestName>
+                    </InterestItem>
+                  ))
+                : <InterestItem>
+                    <InterestName>관심사 없음</InterestName>
+                  </InterestItem>
+              }
+            </InterestsList>
+          </InterestsSection>
+        )}
 
         <ProfileDetails>
           <DetailItem>
-            <DetailLabel>성별</DetailLabel>
-            <DetailValue>{userData.gender}</DetailValue>
+            <DetailLabel>이메일</DetailLabel>
+            <DetailValue>{userData.email}</DetailValue>
           </DetailItem>
           <DetailItem>
-            <DetailLabel>나이</DetailLabel>
-            <DetailValue>{userData.age}세</DetailValue>
-          </DetailItem>
-          <DetailItem>
-            <DetailLabel>국가</DetailLabel>
-            <DetailValue>{userData.country}</DetailValue>
+            <DetailLabel>가입일</DetailLabel>
+            <DetailValue>{new Date(userData.created_at).toLocaleDateString()}</DetailValue>
           </DetailItem>
         </ProfileDetails>
       </ProfileContent>

@@ -10,15 +10,19 @@ const Chatting = () => {
   const [newMessage, setNewMessage] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [participants, setParticipants] = useState([]);
   const chatContentRef = useRef(null);
 
   // 1️⃣ 페이지 진입 시 사용자 정보 가져오기 & 기존 메시지 불러오기
   useEffect(() => {
+    console.log('🔵 useEffect 실행, roomId:', roomId);
     initializeChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
   // 2️⃣ 실시간 구독 설정
   useEffect(() => {
+    console.log('🔵 실시간 구독 설정, roomId:', roomId);
     const channel = supabase
       .channel(`realtime:messages:${roomId}`)
       .on(
@@ -30,7 +34,7 @@ const Chatting = () => {
           filter: `room_id=eq.${roomId}`
         },
         (payload) => {
-          console.log('새 메시지:', payload.new);
+          console.log('🔵 새 메시지 수신:', payload.new);
           setMessages((prev) => [...prev, payload.new]);
         }
       )
@@ -38,6 +42,7 @@ const Chatting = () => {
 
     // 3️⃣ 컴포넌트 종료 시 구독 해제
     return () => {
+      console.log('🔵 실시간 구독 해제');
       supabase.removeChannel(channel);
     };
   }, [roomId]);
@@ -48,35 +53,176 @@ const Chatting = () => {
   }, [messages]);
 
   const initializeChat = async () => {
+    console.log('🔵 initializeChat 시작, roomId:', roomId);
     try {
-      // 현재 사용자 가져오기
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
+      // 현재 사용자 가져오기 (localStorage에서 먼저 확인)
+      const storedUser = localStorage.getItem('currentUser');
+      console.log('🔵 localStorage user:', storedUser);
       
-      setCurrentUser(user);
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        console.log('🔵 parsedUser:', parsedUser);
+        setCurrentUser(parsedUser);
+      } else {
+        console.log('🔵 사용자 정보 없음');
+        setLoading(false);
+        return;
+      }
 
-      // 기존 메시지 불러오기
+      // 간단한 테스트 메시지 설정
+      console.log('🔵 테스트 메시지 설정');
+      const testMessages = [
+        {
+          id: 'test1',
+          room_id: roomId,
+          user_id: parsedUser.id,
+          content: '테스트 메시지입니다.',
+          created_at: new Date().toISOString(),
+          sender: {
+            id: parsedUser.id,
+            nickname: parsedUser.nickname,
+            email: parsedUser.email
+          }
+        }
+      ];
+      
+      console.log('🔵 테스트 메시지 설정 완료:', testMessages);
+      setMessages(testMessages);
+      
+      // 실제 메시지도 로드 시도
+      console.log('🔵 실제 메시지 로드 시도');
       await loadMessages();
+      console.log('🔵 loadMessages 완료');
     } catch (error) {
-      console.error('초기화 오류:', error);
+      console.error('❌ 초기화 오류:', error);
       alert('채팅을 불러오는데 실패했습니다.');
+      navigate('/login');
     } finally {
+      console.log('🔵 setLoading(false) 호출');
       setLoading(false);
     }
   };
 
-  const loadMessages = async () => {
+  const loadParticipants = async () => {
+    console.log('🔵 loadParticipants 시작, roomId:', roomId);
     try {
-      const { data, error } = await supabase
+      // 해당 채팅방에 메시지를 보낸 사용자들의 ID 수집
+      const { data: messageData, error: messageError } = await supabase
+        .from('messages')
+        .select('user_id')
+        .eq('room_id', String(roomId))
+        .order('created_at', { ascending: false });
+
+      if (messageError) {
+        console.error('❌ 메시지 조회 오류:', messageError);
+        throw messageError;
+      }
+
+      if (!messageData || messageData.length === 0) {
+        console.log('🔵 메시지가 없어서 참가자 정보 없음');
+        setParticipants([]);
+        return;
+      }
+
+      // 고유한 사용자 ID 추출
+      const uniqueUserIds = [...new Set(messageData.map(msg => msg.user_id))];
+      console.log('🔵 고유 사용자 ID들:', uniqueUserIds);
+
+      // 각 사용자의 정보 가져오기
+      const participantsData = await Promise.all(
+        uniqueUserIds.map(async (userId) => {
+          try {
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('id, nickname, email, profile_image')
+              .eq('id', userId)
+              .single();
+            
+            if (userError) {
+              console.warn('⚠️ 사용자 조회 실패:', userId, userError);
+              return null;
+            }
+            
+            return userData;
+          } catch (err) {
+            console.warn('⚠️ 사용자 조회 예외:', err);
+            return null;
+          }
+        })
+      );
+
+      // null 값 제거
+      const validParticipants = participantsData.filter(p => p !== null);
+      console.log('🔵 참가자 정보:', validParticipants);
+      setParticipants(validParticipants);
+    } catch (error) {
+      console.error('❌ 참가자 정보 불러오기 오류:', error);
+      setParticipants([]);
+    }
+  };
+
+  const loadMessages = async () => {
+    console.log('🔵 loadMessages 시작, roomId:', roomId);
+    try {
+      // 1. 메시지 조회 (기본)
+      console.log('🔵 메시지 데이터 조회 시작');
+      const { data: messagesData, error: messagesError } = await supabase
         .from('messages')
         .select('*')
-        .eq('room_id', roomId)
+        .eq('room_id', String(roomId))
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
-      setMessages(data || []);
+      console.log('🔵 메시지 조회 결과:', { messagesData, messagesError });
+
+      if (messagesError) {
+        console.error('❌ 메시지 조회 오류:', messagesError);
+        throw messagesError;
+      }
+
+      // 메시지가 없으면 빈 배열로 설정하고 종료
+      if (!messagesData || messagesData.length === 0) {
+        console.log('🔵 메시지 없음, 빈 배열 설정');
+        setMessages([]);
+        return;
+      }
+
+      console.log('🔵 메시지 개수:', messagesData.length);
+
+      // 2. 각 메시지의 사용자 정보 가져오기 (간소화)
+      const messagesWithSender = [];
+      
+      for (const msg of messagesData) {
+        try {
+          console.log(`🔵 메시지 ${msg.id}의 사용자 정보 조회:`, msg.user_id);
+          
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('id, nickname, email')
+            .eq('id', msg.user_id)
+            .single();
+
+          console.log(`🔵 사용자 정보 조회 결과:`, { userData, userError });
+
+          messagesWithSender.push({
+            ...msg,
+            sender: userData || null
+          });
+        } catch (error) {
+          console.error(`❌ 메시지 ${msg.id} 사용자 정보 조회 오류:`, error);
+          messagesWithSender.push({
+            ...msg,
+            sender: null
+          });
+        }
+      }
+      
+      console.log('🔵 최종 메시지 목록:', messagesWithSender);
+      setMessages(messagesWithSender);
+      console.log('🔵 setMessages 완료, 메시지 개수:', messagesWithSender.length);
     } catch (error) {
-      console.error('메시지 불러오기 오류:', error);
+      console.error('❌ 메시지 불러오기 오류:', error);
+      // 오류 발생 시 빈 배열로 설정
+      setMessages([]);
     }
   };
 
@@ -91,6 +237,7 @@ const Chatting = () => {
     }
 
     try {
+      console.log('🔵 메시지 전송 시작:', newMessage.trim());
       const { error } = await supabase.from('messages').insert({
         room_id: roomId,
         user_id: currentUser.id,
@@ -98,9 +245,11 @@ const Chatting = () => {
       });
 
       if (error) throw error;
+      
+      console.log('🔵 메시지 전송 성공');
       setNewMessage('');
     } catch (error) {
-      console.error('메시지 전송 오류:', error);
+      console.error('❌ 메시지 전송 오류:', error);
       alert('메시지 전송에 실패했습니다.');
     }
   };
@@ -111,11 +260,43 @@ const Chatting = () => {
     }
   };
 
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(e);
+    }
+  };
+
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
+    const now = new Date();
+    const diffInHours = (now - date) / (1000 * 60 * 60);
+    
+    if (diffInHours < 24) {
+      // 오늘: 시간:분
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${minutes}`;
+    } else if (diffInHours < 24 * 7) {
+      // 이번 주: 요일
+      const days = ['일', '월', '화', '수', '목', '금', '토'];
+      return days[date.getDay()];
+    } else {
+      // 그 외: 월/일
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      return `${month}/${day}`;
+    }
+  };
+
+  const formatFullTime = (timestamp) => {
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
     const hours = date.getHours().toString().padStart(2, '0');
     const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
+    return `${year}.${month}.${day} ${hours}:${minutes}`;
   };
 
   if (loading) {
@@ -130,21 +311,32 @@ const Chatting = () => {
     <ChattingContainer>
       <ChatHeader>
         <BackButton onClick={() => navigate(-1)}>←</BackButton>
-        <RoomTitle>채팅방 {roomId}</RoomTitle>
+        <RoomInfo>
+          <RoomTitle>채팅방 {roomId}</RoomTitle>
+          <ParticipantCount>
+            {currentUser ? '로그인됨' : '로그인 필요'}
+          </ParticipantCount>
+        </RoomInfo>
       </ChatHeader>
       
       <ChatContent ref={chatContentRef}>
         {messages.length === 0 ? (
           <EmptyMessage>메시지가 없습니다. 첫 메시지를 보내보세요!</EmptyMessage>
         ) : (
-          messages.map((msg) => (
-            <MessageWrapper key={msg.id} isOwn={msg.user_id === currentUser?.id}>
-              <MessageBubble isOwn={msg.user_id === currentUser?.id}>
-                <MessageContent>{msg.content}</MessageContent>
-                <MessageTime>{formatTime(msg.created_at)}</MessageTime>
-              </MessageBubble>
-            </MessageWrapper>
-          ))
+          messages.map((msg) => {
+            const isOwn = msg.user_id === currentUser?.id;
+            const senderName = msg.sender?.nickname || msg.sender?.email?.split('@')[0] || '익명';
+            
+            return (
+              <MessageWrapper key={msg.id} isOwn={isOwn}>
+                {!isOwn && <SenderName>{senderName}</SenderName>}
+                <MessageBubble isOwn={isOwn} title={formatFullTime(msg.created_at)}>
+                  <MessageContent>{msg.content}</MessageContent>
+                  <MessageTime>{formatTime(msg.created_at)}</MessageTime>
+                </MessageBubble>
+              </MessageWrapper>
+            );
+          })
         )}
       </ChatContent>
 
@@ -153,9 +345,10 @@ const Chatting = () => {
           type="text"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="메시지를 입력하세요..."
+          onKeyPress={handleKeyPress}
+          placeholder="메시지를 입력하세요... (Enter로 전송)"
         />
-        <SendButton type="submit">전송</SendButton>
+        <SendButton type="submit" disabled={!newMessage.trim()}>전송</SendButton>
       </ChatInputForm>
     </ChattingContainer>
   );
@@ -189,9 +382,22 @@ const BackButton = styled.button`
   margin-right: 8px;
 `;
 
+const RoomInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+`;
+
 const RoomTitle = styled.h1`
   font-size: 1.2rem;
   font-weight: 600;
+  margin: 0;
+`;
+
+const ParticipantCount = styled.span`
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 2px;
 `;
 
 const ChatContent = styled.div`
@@ -224,7 +430,16 @@ const EmptyMessage = styled.div`
 
 const MessageWrapper = styled.div`
   display: flex;
-  justify-content: ${props => props.isOwn ? 'flex-end' : 'flex-start'};
+  flex-direction: column;
+  align-items: ${props => props.isOwn ? 'flex-end' : 'flex-start'};
+`;
+
+const SenderName = styled.span`
+  font-size: 12px;
+  color: var(--text-light, #666);
+  margin-bottom: 4px;
+  margin-left: 8px;
+  font-weight: 500;
 `;
 
 const MessageBubble = styled.div`

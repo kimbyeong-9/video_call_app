@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiSearch } from 'react-icons/fi';
 import { IoIosArrowDown, IoIosArrowUp } from 'react-icons/io';
+import { supabase } from '../../utils/supabase';
 import { friendsData } from '../../data/FriendsData';
 
 const Search = () => {
@@ -10,13 +11,88 @@ const Search = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isRecommendOpen, setIsRecommendOpen] = useState(true);
   const [searchResults, setSearchResults] = useState([]);
+  const [recommendedUsers, setRecommendedUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleSearch = (e) => {
+  useEffect(() => {
+    loadRecommendedUsers();
+  }, []);
+
+  const loadRecommendedUsers = async () => {
+    try {
+      console.log('🔵 Search - 추천 사용자 로드 시작');
+      
+      // Supabase에서 최근 가입한 사용자들을 추천으로 표시
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('id, nickname, email, bio, profile_image, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      console.log('🔵 Search - 추천 사용자 조회 결과:', { users, error });
+
+      if (error) {
+        console.error('❌ Search - 추천 사용자 조회 오류:', error);
+        // 오류 시 하드코딩된 데이터 사용
+        setRecommendedUsers(friendsData.slice(0, 5));
+        return;
+      }
+
+      if (users && users.length > 0) {
+        setRecommendedUsers(users);
+      } else {
+        // 데이터가 없으면 하드코딩된 데이터 사용
+        setRecommendedUsers(friendsData.slice(0, 5));
+      }
+    } catch (error) {
+      console.error('❌ Search - 추천 사용자 로드 오류:', error);
+      // 오류 시 하드코딩된 데이터 사용
+      setRecommendedUsers(friendsData.slice(0, 5));
+    }
+  };
+
+  const handleSearch = async (e) => {
     e.preventDefault();
-    const filteredUsers = friendsData.filter(user =>
-      user.nickname.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setSearchResults(filteredUsers);
+    
+    if (!searchTerm.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('🔵 Search - 사용자 검색 시작:', searchTerm);
+
+      // Supabase에서 사용자 검색 (닉네임 또는 이메일로 검색)
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('id, nickname, email, bio, profile_image, created_at')
+        .or(`nickname.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
+        .limit(20);
+
+      console.log('🔵 Search - 검색 결과:', { users, error });
+
+      if (error) {
+        console.error('❌ Search - 검색 오류:', error);
+        // 오류 시 하드코딩된 데이터에서 검색
+        const filteredUsers = friendsData.filter(user =>
+          user.nickname.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        setSearchResults(filteredUsers);
+        return;
+      }
+
+      setSearchResults(users || []);
+    } catch (error) {
+      console.error('❌ Search - 검색 중 오류:', error);
+      // 오류 시 하드코딩된 데이터에서 검색
+      const filteredUsers = friendsData.filter(user =>
+        user.nickname.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setSearchResults(filteredUsers);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -41,39 +117,51 @@ const Search = () => {
         
         {isRecommendOpen && (
           <RecommendContent>
-            {friendsData.slice(0, 5).map(user => (
+            {recommendedUsers.map(user => (
               <FriendItem key={user.id} onClick={() => navigate(`/profiles/${user.id}`)}>
                 <ProfileSection>
-                  <ProfileImage src={user.profileImage} alt={user.nickname} />
-                  {user.isOnline && <OnlineIndicator />}
+                  <ProfileImage 
+                    src={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`} 
+                    alt={user.nickname} 
+                  />
+                  <OnlineIndicator />
                 </ProfileSection>
                 
                 <FriendInfo>
                   <FriendHeader>
                     <Nickname>{user.nickname}</Nickname>
-                    <Age>{user.age}세</Age>
+                    <Age>{user.email}</Age>
                   </FriendHeader>
                   
                   <Details>
                     <DetailItem>
-                      <DetailLabel>성별</DetailLabel>
-                      <DetailValue>{user.gender}</DetailValue>
+                      <DetailLabel>가입일</DetailLabel>
+                      <DetailValue>{new Date(user.created_at).toLocaleDateString()}</DetailValue>
                     </DetailItem>
                     
                     <DetailItem>
-                      <DetailLabel>국가</DetailLabel>
-                      <DetailValue>{user.country}</DetailValue>
+                      <DetailLabel>이메일</DetailLabel>
+                      <DetailValue>{user.email}</DetailValue>
                     </DetailItem>
                   </Details>
                   
-                  <Interests>
-                    <InterestLabel>관심사</InterestLabel>
-                    <InterestTags>
-                      {user.interests.map((interest, index) => (
-                        <InterestTag key={index}>{interest}</InterestTag>
-                      ))}
-                    </InterestTags>
-                  </Interests>
+                  {user.bio && (
+                    <Bio>{user.bio}</Bio>
+                  )}
+                  
+                  {user.interests && user.interests.length > 0 && (
+                    <Interests>
+                      <InterestLabel>관심사</InterestLabel>
+                      <InterestTags>
+                        {Array.isArray(user.interests) 
+                          ? user.interests.map((interest, index) => (
+                              <InterestTag key={index}>{interest}</InterestTag>
+                            ))
+                          : <InterestTag>관심사 없음</InterestTag>
+                        }
+                      </InterestTags>
+                    </Interests>
+                  )}
                 </FriendInfo>
               </FriendItem>
             ))}
@@ -83,43 +171,61 @@ const Search = () => {
 
       {searchTerm && (
         <SearchResults>
-          <h3>검색 결과</h3>
-          {searchResults.map(user => (
-            <FriendItem key={user.id} onClick={() => navigate(`/profiles/${user.id}`)}>
-              <ProfileSection>
-                <ProfileImage src={user.profileImage} alt={user.nickname} />
-                {user.isOnline && <OnlineIndicator />}
-              </ProfileSection>
-              
-              <FriendInfo>
-                <FriendHeader>
-                  <Nickname>{user.nickname}</Nickname>
-                  <Age>{user.age}세</Age>
-                </FriendHeader>
+          <h3>검색 결과 {loading && '(검색 중...)'}</h3>
+          {loading ? (
+            <LoadingMessage>검색 중...</LoadingMessage>
+          ) : searchResults.length > 0 ? (
+            searchResults.map(user => (
+              <FriendItem key={user.id} onClick={() => navigate(`/profiles/${user.id}`)}>
+                <ProfileSection>
+                  <ProfileImage 
+                    src={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`} 
+                    alt={user.nickname} 
+                  />
+                  <OnlineIndicator />
+                </ProfileSection>
                 
-                <Details>
-                  <DetailItem>
-                    <DetailLabel>성별</DetailLabel>
-                    <DetailValue>{user.gender}</DetailValue>
-                  </DetailItem>
+                <FriendInfo>
+                  <FriendHeader>
+                    <Nickname>{user.nickname}</Nickname>
+                    <Age>{user.email}</Age>
+                  </FriendHeader>
                   
-                  <DetailItem>
-                    <DetailLabel>국가</DetailLabel>
-                    <DetailValue>{user.country}</DetailValue>
-                  </DetailItem>
-                </Details>
-                
-                <Interests>
-                  <InterestLabel>관심사</InterestLabel>
-                  <InterestTags>
-                    {user.interests.map((interest, index) => (
-                      <InterestTag key={index}>{interest}</InterestTag>
-                    ))}
-                  </InterestTags>
-                </Interests>
-              </FriendInfo>
-            </FriendItem>
-          ))}
+                  <Details>
+                    <DetailItem>
+                      <DetailLabel>가입일</DetailLabel>
+                      <DetailValue>{new Date(user.created_at).toLocaleDateString()}</DetailValue>
+                    </DetailItem>
+                    
+                    <DetailItem>
+                      <DetailLabel>이메일</DetailLabel>
+                      <DetailValue>{user.email}</DetailValue>
+                    </DetailItem>
+                  </Details>
+                  
+                  {user.bio && (
+                    <Bio>{user.bio}</Bio>
+                  )}
+                  
+                  {user.interests && user.interests.length > 0 && (
+                    <Interests>
+                      <InterestLabel>관심사</InterestLabel>
+                      <InterestTags>
+                        {Array.isArray(user.interests) 
+                          ? user.interests.map((interest, index) => (
+                              <InterestTag key={index}>{interest}</InterestTag>
+                            ))
+                          : <InterestTag>관심사 없음</InterestTag>
+                        }
+                      </InterestTags>
+                    </Interests>
+                  )}
+                </FriendInfo>
+              </FriendItem>
+            ))
+          ) : (
+            <NoResultsMessage>검색 결과가 없습니다.</NoResultsMessage>
+          )}
         </SearchResults>
       )}
     </SearchWrapper>
@@ -314,6 +420,27 @@ const InterestTag = styled.span`
   padding: 2px 8px;
   border-radius: 12px;
   font-weight: 500;
+`;
+
+const LoadingMessage = styled.div`
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 16px;
+`;
+
+const NoResultsMessage = styled.div`
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 16px;
+`;
+
+const Bio = styled.p`
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 8px 0;
 `;
 
 export default Search;

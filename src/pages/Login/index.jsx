@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
@@ -19,6 +19,19 @@ const Login = () => {
     type: 'error'
   });
 
+  // 이미 로그인된 사용자인지 확인
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        console.log('🔵 Login - 이미 로그인된 사용자, 홈으로 이동');
+        navigate('/', { replace: true });
+      }
+    };
+    
+    checkAuth();
+  }, [navigate]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -31,6 +44,9 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    console.log('🔵 Login - handleSubmit 시작');
+
     if (!formData.email || !formData.password) {
       setNotification({
         show: true,
@@ -41,35 +57,66 @@ const Login = () => {
     }
 
     try {
+      console.log('🔵 Login - Supabase Auth 로그인 시도:', formData.email);
+      
       // Supabase Auth로 로그인 시도
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password
       });
 
-      if (authError) {
-        // 이메일 존재 여부 확인
-        const { data: emailCheck } = await supabase
-          .from('users')
-          .select('email')
-          .eq('email', formData.email)
-          .single();
+      console.log('🔵 Login - Auth 결과:', { authData, authError });
 
-        if (!emailCheck) {
+      if (authError) {
+        console.log('🔵 Login - Auth 오류:', authError.message);
+        
+        // 더 정확한 오류 메시지 처리
+        if (authError.message.includes('Invalid login credentials')) {
+          // 이메일 존재 여부 확인
+          const { data: emailCheck } = await supabase
+            .from('users')
+            .select('email')
+            .eq('email', formData.email)
+            .single();
+
+          console.log('🔵 Login - 이메일 확인 결과:', emailCheck);
+
+          if (!emailCheck) {
+            setNotification({
+              show: true,
+              message: '등록되지 않은 아이디입니다.',
+              type: 'error'
+            });
+          } else {
+            setNotification({
+              show: true,
+              message: '비밀번호가 일치하지 않습니다.',
+              type: 'error'
+            });
+          }
+        } else if (authError.message.includes('Email not confirmed')) {
           setNotification({
             show: true,
-            message: '등록되지 않은 아이디입니다.',
+            message: '이메일 인증이 필요합니다. 이메일을 확인해주세요.',
+            type: 'error'
+          });
+        } else if (authError.message.includes('Too many requests')) {
+          setNotification({
+            show: true,
+            message: '너무 많은 로그인 시도가 있었습니다. 잠시 후 다시 시도해주세요.',
             type: 'error'
           });
         } else {
           setNotification({
             show: true,
-            message: '비밀번호가 일치하지 않습니다.',
+            message: `로그인 오류: ${authError.message}`,
             type: 'error'
           });
         }
         return;
       }
+
+      console.log('🔵 Login - Auth 성공, 사용자 정보 조회 시작');
 
       // 사용자 추가 정보 가져오기
       const { data: userData, error: userError } = await supabase
@@ -78,9 +125,24 @@ const Login = () => {
         .eq('id', authData.user.id)
         .single();
 
+      console.log('🔵 Login - 사용자 정보 조회 결과:', { userData, userError });
+
       if (userError) {
+        console.error('🔵 Login - 사용자 정보 조회 오류:', userError);
         throw userError;
       }
+
+      if (!userData) {
+        console.error('🔵 Login - 사용자 정보 없음');
+        setNotification({
+          show: true,
+          message: '사용자 정보를 찾을 수 없습니다.',
+          type: 'error'
+        });
+        return;
+      }
+
+      console.log('🔵 Login - 로그인 성공, localStorage 저장');
 
       // 로그인 성공
       setNotification({
@@ -90,18 +152,22 @@ const Login = () => {
       });
 
       // 세션 저장 (localStorage 사용)
-      localStorage.setItem('user', JSON.stringify({
+      const userSession = {
         id: userData.id,
         email: userData.email,
         nickname: userData.nickname
-      }));
+      };
+      
+      localStorage.setItem('currentUser', JSON.stringify(userSession));
+      console.log('🔵 Login - localStorage 저장 완료:', userSession);
 
       // 1초 후 홈으로 이동
       setTimeout(() => {
-        navigate('/');
+        console.log('🔵 Login - 홈으로 이동');
+        navigate('/', { replace: true });
       }, 1000);
     } catch (error) {
-      console.error('로그인 에러:', error);
+      console.error('🔵 Login - 전체 오류:', error);
       setNotification({
         show: true,
         message: '로그인 중 오류가 발생했습니다.',
@@ -110,9 +176,37 @@ const Login = () => {
     }
   };
 
-  const handleSocialLogin = (provider) => {
-    // TODO: 소셜 로그인 구현
-    console.log(`${provider} 로그인 시도`);
+  const handleSocialLogin = async (provider) => {
+    try {
+      if (provider === 'google') {
+        console.log('🔵 Login - Google 소셜 로그인 시작');
+        const { data, error } = await auth.signInWithGoogle();
+        if (error) {
+          console.error('Google 로그인 에러:', error);
+          setNotification({
+            show: true,
+            message: 'Google 로그인에 실패했습니다.',
+            type: 'error'
+          });
+        } else {
+          console.log('🔵 Login - Google 소셜 로그인 성공, 리다이렉트 예정');
+          setNotification({
+            show: true,
+            message: 'Google 로그인에 성공했습니다.',
+            type: 'success'
+          });
+        }
+        // 성공 시 자동으로 리다이렉트됩니다
+        // App.jsx에서 onAuthStateChange로 localStorage가 업데이트됩니다
+      }
+    } catch (error) {
+      console.error('소셜 로그인 에러:', error);
+      setNotification({
+        show: true,
+        message: '소셜 로그인 중 오류가 발생했습니다.',
+        type: 'error'
+      });
+    }
   };
 
   return (

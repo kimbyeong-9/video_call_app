@@ -1,20 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { FiBell, FiSettings } from 'react-icons/fi';
+import { FiBell, FiSettings, FiLogOut, FiFileText, FiShield } from 'react-icons/fi';
 import LogoImage from '../../assets/images/logo/travo_logo.png';
 import { myProfileData } from '../../data/MyProfileData';
 import NotificationPopup from './NotificationPopup';
+import { supabase } from '../../utils/supabase';
 
 const Header = () => {
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const notificationRef = useRef(null);
+  const settingsRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setShowNotifications(false);
+      }
+      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
+        setShowSettingsMenu(false);
       }
     };
 
@@ -23,6 +29,33 @@ const Header = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      console.log('🔵 Header - 로그아웃 시작');
+      
+      // Supabase Auth 로그아웃
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('❌ Header - 로그아웃 오류:', error);
+        return;
+      }
+      
+      // localStorage 정리
+      localStorage.removeItem('currentUser');
+      console.log('✅ Header - 로그아웃 완료, 로그인 페이지로 이동');
+      
+      // 로그인 페이지로 이동
+      navigate('/login');
+      
+    } catch (error) {
+      console.error('❌ Header - 로그아웃 예외:', error);
+      // 오류가 발생해도 강제로 로그인 페이지로 이동
+      localStorage.removeItem('currentUser');
+      navigate('/login');
+    }
+  };
 
   return (
     <HeaderWrapper>
@@ -49,11 +82,45 @@ const Header = () => {
             <NotificationPopup onClose={() => setShowNotifications(false)} />
           )}
         </NotificationWrapper>
-        <IconButton onClick={() => navigate('/settings')}>
-          <SettingsIcon>
-            <FiSettings size={20} />
-          </SettingsIcon>
-        </IconButton>
+        <SettingsWrapper ref={settingsRef}>
+          <IconButton onClick={() => setShowSettingsMenu(!showSettingsMenu)}>
+            <SettingsIcon>
+              <FiSettings size={20} />
+            </SettingsIcon>
+          </IconButton>
+          {showSettingsMenu && (
+            <SettingsMenu>
+              <SettingsMenuItem onClick={() => {
+                setShowSettingsMenu(false);
+                navigate('/settings');
+              }}>
+                <SettingsIcon>
+                  <FiSettings size={16} />
+                </SettingsIcon>
+                <SettingsText>기본 설정</SettingsText>
+              </SettingsMenuItem>
+              <SettingsMenuItem onClick={() => {
+                setShowSettingsMenu(false);
+                navigate('/terms');
+              }}>
+                <SettingsIcon>
+                  <FiShield size={16} />
+                </SettingsIcon>
+                <SettingsText>이용정책</SettingsText>
+              </SettingsMenuItem>
+              <SettingsDivider />
+              <SettingsMenuItem onClick={() => {
+                setShowSettingsMenu(false);
+                handleLogout();
+              }}>
+                <SettingsIcon>
+                  <FiLogOut size={16} />
+                </SettingsIcon>
+                <SettingsText>로그아웃</SettingsText>
+              </SettingsMenuItem>
+            </SettingsMenu>
+          )}
+        </SettingsWrapper>
       </IconSection>
     </HeaderWrapper>
   );
@@ -162,6 +229,56 @@ const NotificationBadge = styled.div`
   height: 8px;
   background-color: #FF3B30;
   border-radius: 50%;
+`;
+
+const SettingsWrapper = styled.div`
+  position: relative;
+`;
+
+const SettingsMenu = styled.div`
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e5e7eb;
+  min-width: 180px;
+  z-index: 1000;
+  overflow: hidden;
+`;
+
+const SettingsMenuItem = styled.button`
+  width: 100%;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  font-size: 14px;
+  color: var(--text-primary);
+
+  &:hover {
+    background-color: #f8fafc;
+  }
+
+  &:active {
+    background-color: #e2e8f0;
+  }
+`;
+
+const SettingsText = styled.span`
+  font-weight: 500;
+`;
+
+const SettingsDivider = styled.div`
+  height: 1px;
+  background-color: #e5e7eb;
+  margin: 4px 0;
 `;
 
 export default Header;

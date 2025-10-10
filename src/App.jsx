@@ -1,9 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, createContext } from 'react';
 import Router from './routes/Router';
 import styled from 'styled-components';
 import { handleAuthStateChange, supabase } from './utils/supabase';
 
+// Context 생성: 현재 사용자 ID를 전역으로 공유
+export const CurrentUserContext = createContext(null);
+
 function App() {
+  const [currentUserId, setCurrentUserId] = useState(null);
+
   useEffect(() => {
     let unsubscribe = () => {};
 
@@ -16,12 +21,13 @@ function App() {
         if (event === 'SIGNED_OUT') {
           console.log('🔵 App.jsx - 로그아웃 감지, localStorage 정리');
           localStorage.removeItem('currentUser');
+          setCurrentUserId(null);
         }
-        
+
         // 로그인 성공 시 localStorage 업데이트
         if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
           console.log('🔵 App.jsx - 로그인 성공 감지, 사용자 정보 업데이트');
-          
+
           try {
             // 사용자 추가 정보 가져오기
             const { data: userData, error: userError } = await supabase
@@ -37,8 +43,9 @@ function App() {
                 email: userData.email,
                 nickname: userData.nickname
               };
-              
+
               localStorage.setItem('currentUser', JSON.stringify(userSession));
+              setCurrentUserId(userData.id);
               console.log('🔵 App.jsx - localStorage 업데이트 완료:', userSession);
             } else {
               console.error('🔵 App.jsx - 사용자 정보 조회 실패:', userError);
@@ -65,9 +72,11 @@ function App() {
   }, []);
 
   return (
-    <AppContainer>
-      <Router />
-    </AppContainer>
+    <CurrentUserContext.Provider value={currentUserId}>
+      <AppContainer>
+        <Router />
+      </AppContainer>
+    </CurrentUserContext.Provider>
   );
 }
 

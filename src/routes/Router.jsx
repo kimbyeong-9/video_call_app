@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { BrowserRouter, useRoutes, Navigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import ChattingLayout from '../components/layout/ChattingLayout';
 import ProtectedRoute from '../components/common/ProtectedRoute';
+import IncomingCallModal from '../components/common/IncomingCallModal';
+import { CurrentUserContext } from '../App';
 
 // Pages
 import Home from '../pages/Home';
@@ -21,8 +23,11 @@ import EditProfile from '../pages/Profiles/EditProfile';
 import Notices from '../pages/Notices';
 import Terms from '../pages/Terms';
 import Settings from '../pages/Settings';
+import VideoCall from '../pages/VideoCall';
 
 const AppRoutes = () => {
+  const currentUserId = useContext(CurrentUserContext);
+
   const routes = useRoutes([
     // Public Routes
     {
@@ -53,6 +58,10 @@ const AppRoutes = () => {
         {
           path: 'chatting/:roomId',
           element: <Chatting />
+        },
+        {
+          path: 'video-call',
+          element: <VideoCall />
         }
       ]
     },
@@ -119,7 +128,12 @@ const AppRoutes = () => {
     }
   ]);
 
-  return routes;
+  return (
+    <>
+      {routes}
+      <IncomingCallModal currentUserId={currentUserId} />
+    </>
+  );
 };
 
 const Router = () => {

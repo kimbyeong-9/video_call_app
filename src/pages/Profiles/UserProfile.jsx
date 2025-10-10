@@ -166,8 +166,8 @@ const UserProfile = () => {
             <FiMessageCircle size={20} />
             <span>메시지</span>
           </ActionButton>
-          <ActionButton 
-            isLiked={isLiked}
+          <ActionButton
+            $isLiked={isLiked}
             onClick={() => setIsLiked(!isLiked)}
           >
             <FiHeart size={20} />
@@ -297,7 +297,7 @@ const ActionButton = styled.button`
   padding: 12px;
   border-radius: 12px;
   border: none;
-  background-color: ${props => props.isLiked ? 'var(--primary-light-blue)' : 'var(--accent-blue)'};
+  background-color: ${props => props.$isLiked ? 'var(--primary-light-blue)' : 'var(--accent-blue)'};
   color: var(--primary-blue);
   font-size: 16px;
   font-weight: 500;
@@ -305,8 +305,8 @@ const ActionButton = styled.button`
   transition: all 0.2s ease;
 
   svg {
-    color: ${props => props.isLiked ? 'var(--primary-dark-blue)' : 'var(--primary-blue)'};
-    fill: ${props => props.isLiked ? 'var(--primary-dark-blue)' : 'transparent'};
+    color: ${props => props.$isLiked ? 'var(--primary-dark-blue)' : 'var(--primary-blue)'};
+    fill: ${props => props.$isLiked ? 'var(--primary-dark-blue)' : 'transparent'};
   }
 
   &:hover {

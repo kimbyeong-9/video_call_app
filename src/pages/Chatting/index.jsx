@@ -27,18 +27,34 @@ const Chatting = () => {
       .channel(`realtime:messages:${roomId}`)
       .on(
         'postgres_changes',
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
+        {
+          event: 'INSERT',
+          schema: 'public',
           table: 'messages',
           filter: `room_id=eq.${roomId}`
         },
-        (payload) => {
+        async (payload) => {
           console.log('🔵 새 메시지 수신:', payload.new);
-          setMessages((prev) => [...prev, payload.new]);
+
+          // 발신자 정보 가져오기
+          const { data: senderData } = await supabase
+            .from('users')
+            .select('id, nickname, email')
+            .eq('id', payload.new.user_id)
+            .single();
+
+          const messageWithSender = {
+            ...payload.new,
+            sender: senderData
+          };
+
+          console.log('🔵 발신자 정보 포함된 메시지:', messageWithSender);
+          setMessages((prev) => [...prev, messageWithSender]);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('🔵 Realtime 구독 상태:', status);
+      });
 
     // 3️⃣ 컴포넌트 종료 시 구독 해제
     return () => {
@@ -58,45 +74,25 @@ const Chatting = () => {
       // 현재 사용자 가져오기 (localStorage에서 먼저 확인)
       const storedUser = localStorage.getItem('currentUser');
       console.log('🔵 localStorage user:', storedUser);
-      
-      if (storedUser) {
-        const parsedUser = JSON.parse(storedUser);
-        console.log('🔵 parsedUser:', parsedUser);
-        setCurrentUser(parsedUser);
-      } else {
+
+      if (!storedUser) {
         console.log('🔵 사용자 정보 없음');
-        setLoading(false);
+        alert('로그인이 필요합니다.');
+        navigate('/login');
         return;
       }
 
-      // 간단한 테스트 메시지 설정
-      console.log('🔵 테스트 메시지 설정');
-      const testMessages = [
-        {
-          id: 'test1',
-          room_id: roomId,
-          user_id: parsedUser.id,
-          content: '테스트 메시지입니다.',
-          created_at: new Date().toISOString(),
-          sender: {
-            id: parsedUser.id,
-            nickname: parsedUser.nickname,
-            email: parsedUser.email
-          }
-        }
-      ];
-      
-      console.log('🔵 테스트 메시지 설정 완료:', testMessages);
-      setMessages(testMessages);
-      
-      // 실제 메시지도 로드 시도
+      const parsedUser = JSON.parse(storedUser);
+      console.log('🔵 parsedUser:', parsedUser);
+      setCurrentUser(parsedUser);
+
+      // 실제 메시지 로드
       console.log('🔵 실제 메시지 로드 시도');
       await loadMessages();
       console.log('🔵 loadMessages 완료');
     } catch (error) {
       console.error('❌ 초기화 오류:', error);
-      alert('채팅을 불러오는데 실패했습니다.');
-      navigate('/login');
+      alert('채팅을 불러오는데 실패했습니다: ' + error.message);
     } finally {
       console.log('🔵 setLoading(false) 호출');
       setLoading(false);
@@ -328,9 +324,9 @@ const Chatting = () => {
             const senderName = msg.sender?.nickname || msg.sender?.email?.split('@')[0] || '익명';
             
             return (
-              <MessageWrapper key={msg.id} isOwn={isOwn}>
+              <MessageWrapper key={msg.id} $isOwn={isOwn}>
                 {!isOwn && <SenderName>{senderName}</SenderName>}
-                <MessageBubble isOwn={isOwn} title={formatFullTime(msg.created_at)}>
+                <MessageBubble $isOwn={isOwn} title={formatFullTime(msg.created_at)}>
                   <MessageContent>{msg.content}</MessageContent>
                   <MessageTime>{formatTime(msg.created_at)}</MessageTime>
                 </MessageBubble>
@@ -431,7 +427,7 @@ const EmptyMessage = styled.div`
 const MessageWrapper = styled.div`
   display: flex;
   flex-direction: column;
-  align-items: ${props => props.isOwn ? 'flex-end' : 'flex-start'};
+  align-items: ${props => props.$isOwn ? 'flex-end' : 'flex-start'};
 `;
 
 const SenderName = styled.span`
@@ -445,9 +441,9 @@ const SenderName = styled.span`
 const MessageBubble = styled.div`
   max-width: 70%;
   padding: 12px 16px;
-  border-radius: ${props => props.isOwn ? '20px 20px 4px 20px' : '20px 20px 20px 4px'};
-  background-color: ${props => props.isOwn ? '#007aff' : '#ffffff'};
-  color: ${props => props.isOwn ? '#ffffff' : '#000000'};
+  border-radius: ${props => props.$isOwn ? '20px 20px 4px 20px' : '20px 20px 20px 4px'};
+  background-color: ${props => props.$isOwn ? '#007aff' : '#ffffff'};
+  color: ${props => props.$isOwn ? '#ffffff' : '#000000'};
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 `;
 

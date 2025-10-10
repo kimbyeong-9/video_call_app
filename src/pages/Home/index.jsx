@@ -300,9 +300,9 @@ const Home = () => {
                 }}
               >
                 {recommendedUsers.map((user, index) => (
-                  <LargeUserCard 
+                  <LargeUserCard
                     key={user.id}
-                    backgroundImage={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`}
+                    $backgroundImage={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`}
                   >
                     <CardOverlay />
                     <CardContent>
@@ -341,7 +341,7 @@ const Home = () => {
                   {recommendedUsers.map((_, index) => (
                     <Dot
                       key={index}
-                      active={index === currentIndex}
+                      $active={index === currentIndex}
                       onClick={() => setCurrentIndex(index)}
                     />
                   ))}
@@ -562,7 +562,7 @@ const LargeUserCard = styled.div`
   -webkit-user-select: none;
   pointer-events: auto;
   overflow: hidden;
-  background-image: url(${props => props.backgroundImage});
+  background-image: url(${props => props.$backgroundImage});
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -760,7 +760,7 @@ const Dot = styled.button`
   height: 8px;
   border-radius: 50%;
   border: none;
-  background-color: ${props => props.active ? 'var(--primary-blue)' : '#e5e7eb'};
+  background-color: ${props => props.$active ? 'var(--primary-blue)' : '#e5e7eb'};
   cursor: pointer;
   transition: all 0.2s ease;
 

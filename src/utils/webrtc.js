@@ -218,8 +218,15 @@ export const videoCall = {
    * 수신 통화 감지 (특정 사용자에게 오는 통화)
    */
   subscribeToIncomingCalls: (userId, callback) => {
+    console.log('🔵 [WebRTC] 수신 통화 구독 시작:', userId);
+
     const channel = supabase
-      .channel(`incoming-calls:${userId}`)
+      .channel(`incoming-calls:${userId}`, {
+        config: {
+          broadcast: { self: false },
+          presence: { key: userId }
+        }
+      })
       .on(
         'postgres_changes',
         {
@@ -229,12 +236,27 @@ export const videoCall = {
           filter: `receiver_id=eq.${userId}`
         },
         async (payload) => {
+          console.log('🔵 [WebRTC] 수신 통화 감지:', payload);
+
+          // pending 상태의 통화만 처리
+          if (payload.new.status !== 'pending') {
+            console.log('⚠️ [WebRTC] pending 상태가 아님, 무시:', payload.new.status);
+            return;
+          }
+
           // 발신자 정보 가져오기
-          const { data: callerData } = await supabase
+          const { data: callerData, error: callerError } = await supabase
             .from('users')
             .select('id, nickname, email, profile_image')
             .eq('id', payload.new.caller_id)
             .single();
+
+          if (callerError) {
+            console.error('❌ [WebRTC] 발신자 정보 조회 실패:', callerError);
+            return;
+          }
+
+          console.log('✅ [WebRTC] 발신자 정보 조회 완료:', callerData);
 
           callback({
             callId: payload.new.id,
@@ -243,7 +265,16 @@ export const videoCall = {
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('🔵 [WebRTC] 구독 상태 변경:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ [WebRTC] 수신 통화 구독 완료');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ [WebRTC] 채널 에러');
+        } else if (status === 'TIMED_OUT') {
+          console.error('❌ [WebRTC] 구독 타임아웃');
+        }
+      });
 
     return channel;
   }

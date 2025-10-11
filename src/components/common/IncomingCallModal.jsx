@@ -7,16 +7,20 @@ import { videoCall } from '../../utils/webrtc';
 const IncomingCallModal = ({ currentUserId }) => {
   const navigate = useNavigate();
   const [incomingCall, setIncomingCall] = useState(null);
-  const [channel, setChannel] = useState(null);
 
   useEffect(() => {
-    if (!currentUserId) return;
+    if (!currentUserId) {
+      console.log('⚠️ [IncomingCallModal] currentUserId 없음');
+      return;
+    }
+
+    console.log('🔵 [IncomingCallModal] 수신 통화 구독 시작:', currentUserId);
 
     // 수신 통화 구독
     const callChannel = videoCall.subscribeToIncomingCalls(
       currentUserId,
       (callInfo) => {
-        console.log('수신 통화:', callInfo);
+        console.log('✅ [IncomingCallModal] 수신 통화 콜백 실행:', callInfo);
         setIncomingCall(callInfo);
 
         // 벨소리 재생 (선택사항)
@@ -24,9 +28,8 @@ const IncomingCallModal = ({ currentUserId }) => {
       }
     );
 
-    setChannel(callChannel);
-
     return () => {
+      console.log('🔵 [IncomingCallModal] 구독 해제');
       if (callChannel) {
         callChannel.unsubscribe();
       }

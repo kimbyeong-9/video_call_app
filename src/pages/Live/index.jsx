@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { FiVideo, FiPhone, FiX } from 'react-icons/fi';
+import { FiVideo } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
 import { videoCall } from '../../utils/webrtc';
 
@@ -12,7 +12,6 @@ const Live = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
-  const [incomingCall, setIncomingCall] = useState(null); // 수신 통화 정보
 
   // 사용자 목록 로드
   useEffect(() => {
@@ -108,26 +107,6 @@ const Live = () => {
     };
   }, [navigate]);
 
-  // 수신 통화 감지
-  useEffect(() => {
-    if (!currentUser) return;
-
-    console.log('🔵 Live - 수신 통화 구독 시작:', currentUser.id);
-
-    const incomingCallChannel = videoCall.subscribeToIncomingCalls(
-      currentUser.id,
-      (callInfo) => {
-        console.log('🔵 Live - 수신 통화:', callInfo);
-        setIncomingCall(callInfo);
-      }
-    );
-
-    return () => {
-      console.log('🔵 Live - 수신 통화 구독 해제');
-      supabase.removeChannel(incomingCallChannel);
-    };
-  }, [currentUser]);
-
   const handleMessageChange = (userId, value) => {
     setMessages(prev => ({ ...prev, [userId]: value }));
   };
@@ -205,43 +184,6 @@ const Live = () => {
     }
   };
 
-  // 통화 수락
-  const handleAcceptCall = async () => {
-    if (!incomingCall) return;
-
-    try {
-      console.log('🔵 Live - 통화 수락:', incomingCall.callId);
-
-      // 통화 상태를 accepted로 변경
-      await videoCall.updateCallStatus(incomingCall.callId, 'accepted');
-
-      // 영상통화 페이지로 이동 (수신자 모드)
-      navigate(`/video-call?callId=${incomingCall.callId}&mode=receiver`);
-
-      setIncomingCall(null);
-    } catch (error) {
-      console.error('❌ Live - 통화 수락 에러:', error);
-      alert('통화 수락에 실패했습니다.');
-    }
-  };
-
-  // 통화 거절
-  const handleDeclineCall = async () => {
-    if (!incomingCall) return;
-
-    try {
-      console.log('🔵 Live - 통화 거절:', incomingCall.callId);
-
-      // 통화 상태를 declined로 변경
-      await videoCall.updateCallStatus(incomingCall.callId, 'declined');
-
-      setIncomingCall(null);
-    } catch (error) {
-      console.error('❌ Live - 통화 거절 에러:', error);
-      alert('통화 거절에 실패했습니다.');
-    }
-  };
-
   if (loading) {
     return (
       <LiveWrapper>
@@ -262,33 +204,6 @@ const Live = () => {
           <br />
           <strong>User ID:</strong> {currentUser.id}
         </DebugInfo>
-      )}
-
-      {/* 수신 통화 모달 */}
-      {incomingCall && (
-        <IncomingCallModal>
-          <ModalOverlay onClick={handleDeclineCall} />
-          <ModalContent>
-            <CallerImage
-              src={incomingCall.caller?.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${incomingCall.caller?.nickname}`}
-              alt={incomingCall.caller?.nickname}
-            />
-            <CallerInfo>
-              <CallerName>{incomingCall.caller?.nickname}</CallerName>
-              <CallerStatus>영상통화 요청 중...</CallerStatus>
-            </CallerInfo>
-            <CallActions>
-              <AcceptButton onClick={handleAcceptCall}>
-                <FiPhone size={24} />
-                수락
-              </AcceptButton>
-              <DeclineButton onClick={handleDeclineCall}>
-                <FiX size={24} />
-                거절
-              </DeclineButton>
-            </CallActions>
-          </ModalContent>
-        </IncomingCallModal>
       )}
 
       {users.length === 0 ? (
@@ -562,151 +477,6 @@ const EmptyText = styled.p`
   font-size: 16px;
   color: var(--text-secondary);
   margin: 0;
-`;
-
-const IncomingCallModal = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const ModalOverlay = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-`;
-
-const ModalContent = styled.div`
-  position: relative;
-  background: white;
-  border-radius: 24px;
-  padding: 40px 32px;
-  max-width: 400px;
-  width: 90%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-  animation: slideUp 0.3s ease-out;
-
-  @keyframes slideUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-`;
-
-const CallerImage = styled.img`
-  width: 120px;
-  height: 120px;
-  border-radius: 60px;
-  object-fit: cover;
-  border: 4px solid var(--primary-blue);
-  box-shadow: 0 4px 16px rgba(43, 87, 154, 0.3);
-`;
-
-const CallerInfo = styled.div`
-  text-align: center;
-`;
-
-const CallerName = styled.h2`
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 8px 0;
-`;
-
-const CallerStatus = styled.p`
-  font-size: 16px;
-  color: var(--text-secondary);
-  margin: 0;
-  animation: pulse 2s ease-in-out infinite;
-
-  @keyframes pulse {
-    0%, 100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
-  }
-`;
-
-const CallActions = styled.div`
-  display: flex;
-  gap: 16px;
-  width: 100%;
-  margin-top: 8px;
-`;
-
-const AcceptButton = styled.button`
-  flex: 1;
-  padding: 16px 24px;
-  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-  color: white;
-  border: none;
-  border-radius: 16px;
-  font-weight: 600;
-  font-size: 18px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  box-shadow: 0 4px 16px rgba(76, 175, 80, 0.4);
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.5);
-  }
-
-  &:active {
-    transform: translateY(0);
-  }
-`;
-
-const DeclineButton = styled.button`
-  flex: 1;
-  padding: 16px 24px;
-  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
-  color: white;
-  border: none;
-  border-radius: 16px;
-  font-weight: 600;
-  font-size: 18px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  box-shadow: 0 4px 16px rgba(244, 67, 54, 0.4);
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(244, 67, 54, 0.5);
-  }
-
-  &:active {
-    transform: translateY(0);
-  }
 `;
 
 export default Live;

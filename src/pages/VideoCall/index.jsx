@@ -104,10 +104,19 @@ const VideoCall = () => {
         await webrtcManagerRef.current.createOffer();
       } else {
         // 수신자인 경우 통화 정보 조회
-        const { data: callData } = await videoCall.getCall(callId);
-        if (callData?.caller) {
+        console.log('🔵 수신자 모드 - 통화 정보 조회 시작');
+        const { data: callData, error: callError } = await videoCall.getCall(callId);
+        
+        if (callError) {
+          console.error('❌ 통화 정보 조회 실패:', callError);
+          // 에러가 발생해도 통화는 계속 진행
+        } else if (callData?.caller) {
+          console.log('✅ 발신자 정보 조회 성공:', callData.caller);
           setCallerInfo(callData.caller);
+        } else {
+          console.warn('⚠️ 발신자 정보 없음');
         }
+        
         setCallStatus('통화 수락됨');
         await videoCall.updateCallStatus(callId, 'active');
       }

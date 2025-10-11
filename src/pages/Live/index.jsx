@@ -157,7 +157,9 @@ const Live = () => {
         return;
       }
 
-      console.log('🔵 Live - 통화 시작:', receiverUser.nickname);
+      console.log('🔵 Live - 통화 시작 요청');
+      console.log('🔵 Live - 발신자 ID:', currentUser.id);
+      console.log('🔵 Live - 수신자:', receiverUser.nickname, '/', receiverUser.id);
 
       // 통화 생성
       const { data: callData, error } = await videoCall.createCall(
@@ -167,18 +169,22 @@ const Live = () => {
 
       if (error) {
         console.error('❌ Live - 통화 생성 실패:', error);
-        alert('통화를 시작할 수 없습니다.');
+        alert(`통화를 시작할 수 없습니다: ${error.message}`);
         return;
       }
 
-      console.log('✅ Live - 통화 생성 완료:', callData.id);
+      console.log('✅ Live - 통화 생성 완료!');
+      console.log('✅ Live - Call ID:', callData.id);
+      console.log('✅ Live - Caller ID:', callData.caller_id);
+      console.log('✅ Live - Receiver ID:', callData.receiver_id);
+      console.log('✅ Live - Status:', callData.status);
 
       // 영상통화 페이지로 이동 (발신자 모드)
       navigate(`/video-call?callId=${callData.id}&mode=caller`);
 
     } catch (error) {
       console.error('❌ Live - 통화 시작 에러:', error);
-      alert('통화 연결에 실패했습니다.');
+      alert(`통화 연결에 실패했습니다: ${error.message}`);
     } finally {
       setIsCallLoading(false);
     }

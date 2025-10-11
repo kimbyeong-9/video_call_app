@@ -10,17 +10,26 @@ const IncomingCallModal = ({ currentUserId }) => {
 
   useEffect(() => {
     if (!currentUserId) {
-      console.log('⚠️ [IncomingCallModal] currentUserId 없음');
+      console.warn('⚠️ [IncomingCallModal] currentUserId 없음 - 통화 수신 불가');
       return;
     }
 
-    console.log('🔵 [IncomingCallModal] 수신 통화 구독 시작:', currentUserId);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔵 [IncomingCallModal] 수신 통화 구독 시작');
+    console.log('🔵 [IncomingCallModal] User ID:', currentUserId);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // 수신 통화 구독
     const callChannel = videoCall.subscribeToIncomingCalls(
       currentUserId,
       (callInfo) => {
-        console.log('✅ [IncomingCallModal] 수신 통화 콜백 실행:', callInfo);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('🎉 [IncomingCallModal] 수신 통화 감지!!!');
+        console.log('🎉 Call ID:', callInfo.callId);
+        console.log('🎉 Caller:', callInfo.caller?.nickname);
+        console.log('🎉 Status:', callInfo.status);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        
         setIncomingCall(callInfo);
 
         // 벨소리 재생 (선택사항)
@@ -29,7 +38,7 @@ const IncomingCallModal = ({ currentUserId }) => {
     );
 
     return () => {
-      console.log('🔵 [IncomingCallModal] 구독 해제');
+      console.log('🔵 [IncomingCallModal] 구독 해제:', currentUserId);
       if (callChannel) {
         callChannel.unsubscribe();
       }

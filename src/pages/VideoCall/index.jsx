@@ -181,11 +181,11 @@ const VideoCall = () => {
 
       {/* 컨트롤 버튼 */}
       <ControlBar>
-        <ControlButton onClick={toggleMute} active={!isMuted}>
+        <ControlButton onClick={toggleMute} $active={!isMuted}>
           {isMuted ? <FiMicOff size={24} /> : <FiMic size={24} />}
         </ControlButton>
 
-        <ControlButton onClick={toggleVideo} active={!isVideoOff}>
+        <ControlButton onClick={toggleVideo} $active={!isVideoOff}>
           {isVideoOff ? <FiVideoOff size={24} /> : <FiVideo size={24} />}
         </ControlButton>
 
@@ -310,8 +310,8 @@ const ControlButton = styled.button`
   height: 56px;
   border-radius: 50%;
   border: none;
-  background: ${props => props.active ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.3)'};
-  color: ${props => props.active ? '#333' : '#fff'};
+  background: ${props => props.$active ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.3)'};
+  color: ${props => props.$active ? '#333' : '#fff'};
   display: flex;
   align-items: center;
   justify-content: center;

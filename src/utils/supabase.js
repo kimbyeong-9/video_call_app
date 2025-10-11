@@ -92,6 +92,72 @@ export const auth = {
     });
     return { data, error };
   },
+
+  // 비밀번호 재설정 이메일 발송
+  sendPasswordResetEmail: async (email) => {
+    try {
+      // 개발/프로덕션 환경에 따라 redirectTo URL 설정
+      const redirectTo = window.location.hostname === 'localhost'
+        ? 'http://localhost:3001/reset-password'
+        : `${window.location.origin}/reset-password`;
+
+      console.log('🔵 비밀번호 재설정 redirectTo:', redirectTo);
+
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectTo
+      });
+
+      if (error) {
+        console.error('비밀번호 재설정 이메일 발송 에러:', error);
+        return { data: null, error };
+      }
+
+      return { data, error: null };
+    } catch (error) {
+      console.error('비밀번호 재설정 이메일 발송 예외:', error);
+      return { data: null, error };
+    }
+  },
+
+  // 새 비밀번호로 변경
+  updatePassword: async (newPassword) => {
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        console.error('비밀번호 변경 에러:', error);
+        return { data: null, error };
+      }
+
+      return { data, error: null };
+    } catch (error) {
+      console.error('비밀번호 변경 예외:', error);
+      return { data: null, error };
+    }
+  },
+
+  // 이메일로 사용자 찾기 (아이디 찾기용)
+  findUserByEmail: async (email) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('email, nickname')
+        .eq('email', email)
+        .single();
+
+      if (error) {
+        console.error('사용자 조회 에러:', error);
+        return { data: null, error };
+      }
+
+      return { data, error: null };
+    } catch (error) {
+      console.error('사용자 조회 예외:', error);
+      return { data: null, error };
+    }
+  },
 };
 
 // Google 로그인 후 사용자 정보를 users 테이블에 저장

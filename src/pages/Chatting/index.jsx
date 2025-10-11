@@ -25,6 +25,29 @@ const Chatting = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
+  // localStorage 변경 감지 (로그아웃/로그인 시)
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const storedUser = localStorage.getItem('currentUser');
+      const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+
+      // 사용자 정보가 변경되었는지 확인
+      if (!parsedUser && currentUser) {
+        // 로그아웃 감지
+        console.log('🔵 Chatting - 로그아웃 감지, 로그인 페이지로 이동');
+        navigate('/login');
+      } else if (parsedUser && currentUser && parsedUser.id !== currentUser.id) {
+        // 다른 사용자로 로그인
+        console.log('🔵 Chatting - 사용자 변경 감지, 데이터 새로고침');
+        initializeChat();
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [currentUser, navigate]);
+
   // 2️⃣ 실시간 구독 설정
   useEffect(() => {
     console.log('🔵 실시간 구독 설정, roomId:', roomId);

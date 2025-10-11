@@ -42,9 +42,56 @@ export const UnreadMessagesProvider = ({ children }) => {
         // localStorage에서 마지막 읽은 시간 불러오기
         const times = loadLastReadTimes(user.id);
         setLastReadTimes(times);
+      } else {
+        // localStorage에 사용자 정보가 없으면 상태 초기화
+        console.log('🔵 UnreadMessagesContext - 사용자 정보 없음, 상태 초기화');
+        setCurrentUser(null);
+        setUnreadCount(0);
+        setUnreadByRoom({});
+        setLastReadTimes({});
       }
     };
     getUserInfo();
+
+    // localStorage 변경 감지 (다른 탭이나 로그아웃 시)
+    const handleStorageChange = (e) => {
+      if (e.key === 'currentUser') {
+        console.log('🔵 UnreadMessagesContext - localStorage 변경 감지');
+        getUserInfo();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // 직접적인 localStorage 변경도 감지하기 위한 interval
+    const intervalId = setInterval(() => {
+      const storedUser = localStorage.getItem('currentUser');
+      const currentStoredUser = storedUser ? JSON.parse(storedUser) : null;
+
+      // 이전 사용자 정보를 ref 없이 직접 비교
+      setCurrentUser((prevUser) => {
+        if (!currentStoredUser && prevUser) {
+          // 로그아웃 감지
+          console.log('🔵 UnreadMessagesContext - 로그아웃 감지');
+          setUnreadCount(0);
+          setUnreadByRoom({});
+          setLastReadTimes({});
+          return null;
+        } else if (currentStoredUser && (!prevUser || currentStoredUser.id !== prevUser.id)) {
+          // 사용자 변경 감지
+          console.log('🔵 UnreadMessagesContext - 사용자 변경 감지');
+          const times = loadLastReadTimes(currentStoredUser.id);
+          setLastReadTimes(times);
+          return currentStoredUser;
+        }
+        return prevUser;
+      });
+    }, 500);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(intervalId);
+    };
   }, [loadLastReadTimes]);
 
   // 읽지 않은 메시지 개수 계산

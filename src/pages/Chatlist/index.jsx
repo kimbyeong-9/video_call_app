@@ -33,40 +33,51 @@ const Chatlist = () => {
       // 데이터베이스에서 사용자가 참여한 채팅방 목록 가져오기
       console.log('🔵 데이터베이스에서 채팅방 목록 조회');
 
-      // 1. 사용자가 메시지를 보내거나 받은 모든 room_id 가져오기
+      // 1. 현재 사용자가 보낸 메시지가 있는 room_id 가져오기
+      const { data: myMessagesData, error: myMessagesError } = await supabase
+        .from('messages')
+        .select('room_id')
+        .eq('user_id', user.id);
+
+      if (myMessagesError) {
+        console.error('❌ 내 메시지 조회 오류:', myMessagesError);
+        setChatRooms([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log('🔵 내가 보낸 메시지가 있는 방:', myMessagesData);
+
+      if (!myMessagesData || myMessagesData.length === 0) {
+        console.log('🔵 내가 참여한 채팅방 없음');
+        setChatRooms([]);
+        setLoading(false);
+        return;
+      }
+
+      // 2. 내가 참여한 채팅방 ID 추출 (중복 제거)
+      const myRoomIds = [...new Set(myMessagesData.map(msg => msg.room_id))];
+      console.log('🔵 내가 참여 중인 채팅방 ID들:', myRoomIds);
+
+      // 3. 해당 채팅방들의 모든 메시지 가져오기
       const { data: messagesData, error: messagesError } = await supabase
         .from('messages')
         .select('room_id, user_id, content, created_at')
+        .in('room_id', myRoomIds)
         .order('created_at', { ascending: false });
 
       if (messagesError) {
-        console.error('❌ 메시지 조회 오류:', messagesError);
+        console.error('❌ 채팅방 메시지 조회 오류:', messagesError);
         setChatRooms([]);
         setLoading(false);
         return;
       }
 
-      console.log('🔵 전체 메시지 데이터:', messagesData);
+      console.log('🔵 내 채팅방들의 메시지 데이터:', messagesData);
 
-      if (!messagesData || messagesData.length === 0) {
-        console.log('🔵 메시지 없음');
-        setChatRooms([]);
-        setLoading(false);
-        return;
-      }
-
-      // 2. 현재 사용자가 참여한 채팅방 ID 추출 (중복 제거)
-      const roomIds = [...new Set(
-        messagesData
-          .filter(msg => msg.user_id === user.id || messagesData.some(m => m.room_id === msg.room_id && m.user_id !== user.id))
-          .map(msg => msg.room_id)
-      )];
-
-      console.log('🔵 참여 중인 채팅방 ID들:', roomIds);
-
-      // 3. 각 채팅방의 정보 구성
+      // 4. 각 채팅방의 정보 구성
       const roomsData = await Promise.all(
-        roomIds.map(async (roomId) => {
+        myRoomIds.map(async (roomId) => {
           // 해당 채팅방의 모든 메시지
           const roomMessages = messagesData.filter(msg => msg.room_id === roomId);
 
@@ -127,6 +138,41 @@ const Chatlist = () => {
     console.log('🔵 Chatlist useEffect 실행');
     loadChatRooms();
   }, [loadChatRooms]);
+
+  // localStorage 변경 감지 (로그아웃/로그인 시)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      console.log('🔵 Chatlist - localStorage 변경 감지, 데이터 새로고침');
+      loadChatRooms();
+    };
+
+    // localStorage 변경 감지 (다른 탭)
+    window.addEventListener('storage', handleStorageChange);
+
+    // 같은 탭에서의 변경 감지를 위한 interval
+    const intervalId = setInterval(() => {
+      const storedUser = localStorage.getItem('currentUser');
+      const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+
+      // 사용자 정보가 변경되었는지 확인
+      if (!parsedUser && currentUser) {
+        // 로그아웃 감지
+        console.log('🔵 Chatlist - 로그아웃 감지, 상태 초기화');
+        setCurrentUser(null);
+        setChatRooms([]);
+        setLoading(false);
+      } else if (parsedUser && (!currentUser || parsedUser.id !== currentUser.id)) {
+        // 다른 사용자로 로그인
+        console.log('🔵 Chatlist - 사용자 변경 감지, 데이터 새로고침');
+        loadChatRooms();
+      }
+    }, 500);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(intervalId);
+    };
+  }, [currentUser, loadChatRooms]);
 
   // 실시간 메시지 구독
   useEffect(() => {

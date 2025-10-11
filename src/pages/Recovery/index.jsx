@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
+import { auth } from '../../utils/supabase';
 
 const Recovery = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('id'); // 'id' or 'password'
+  const [activeTab, setActiveTab] = useState('password'); // 'id' or 'password'
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -13,7 +14,9 @@ const Recovery = () => {
   });
   const [step, setStep] = useState(1);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [isVerificationSent, setIsVerificationSent] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -35,16 +38,11 @@ const Recovery = () => {
   };
 
   const handleSendVerification = async () => {
+    setError('');
+    setSuccess('');
+
     if (activeTab === 'id') {
-      if (!formData.name || !formData.phone) {
-        setError('모든 필드를 입력해주세요.');
-        return;
-      }
-      if (!validatePhone(formData.phone)) {
-        setError('올바른 전화번호 형식이 아닙니다.');
-        return;
-      }
-    } else {
+      // 아이디 찾기 - 현재 앱은 이메일이 아이디이므로 간단히 처리
       if (!formData.email) {
         setError('이메일을 입력해주세요.');
         return;
@@ -53,31 +51,60 @@ const Recovery = () => {
         setError('올바른 이메일 형식이 아닙니다.');
         return;
       }
-    }
 
-    try {
-      // TODO: 인증번호 발송 API 호출
-      setIsVerificationSent(true);
-      setStep(2);
-    } catch (error) {
-      setError('인증번호 발송에 실패했습니다. 다시 시도해주세요.');
+      setIsLoading(true);
+      try {
+        const { data, error } = await auth.findUserByEmail(formData.email);
+
+        if (error || !data) {
+          setError('해당 이메일로 가입된 계정을 찾을 수 없습니다.');
+          return;
+        }
+
+        setSuccess(`가입된 이메일: ${data.email}\n닉네임: ${data.nickname}`);
+        setStep(2);
+      } catch (error) {
+        setError('계정 조회에 실패했습니다. 다시 시도해주세요.');
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // 비밀번호 찾기 - Supabase 비밀번호 재설정 이메일 발송
+      if (!formData.email) {
+        setError('이메일을 입력해주세요.');
+        return;
+      }
+      if (!validateEmail(formData.email)) {
+        setError('올바른 이메일 형식이 아닙니다.');
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        console.log('🔵 비밀번호 재설정 이메일 발송:', formData.email);
+        const { error } = await auth.sendPasswordResetEmail(formData.email);
+
+        if (error) {
+          console.error('❌ 비밀번호 재설정 이메일 발송 실패:', error);
+          setError('비밀번호 재설정 이메일 발송에 실패했습니다.');
+          return;
+        }
+
+        console.log('✅ 비밀번호 재설정 이메일 발송 완료');
+        setSuccess('비밀번호 재설정 링크가 이메일로 전송되었습니다.\n이메일을 확인해주세요.');
+        setStep(2);
+      } catch (error) {
+        console.error('❌ 비밀번호 재설정 예외:', error);
+        setError('비밀번호 재설정 이메일 발송에 실패했습니다. 다시 시도해주세요.');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleVerify = async () => {
-    if (!formData.verificationCode) {
-      setError('인증번호를 입력해주세요.');
-      return;
-    }
-
-    try {
-      // TODO: 인증번호 확인 및 계정 찾기 API 호출
-      // 성공 시 결과 페이지로 이동 또는 임시 비밀번호 발급
-      alert('인증이 완료되었습니다.');
-      navigate('/login');
-    } catch (error) {
-      setError('인증에 실패했습니다. 다시 시도해주세요.');
-    }
+    // 이 함수는 이제 사용하지 않지만, 추후 확장을 위해 유지
+    navigate('/login');
   };
 
   return (
@@ -87,22 +114,24 @@ const Recovery = () => {
 
         <TabGroup>
           <Tab
-            active={activeTab === 'id'}
+            $active={activeTab === 'id'}
             onClick={() => {
               setActiveTab('id');
               setStep(1);
               setError('');
+              setSuccess('');
               setIsVerificationSent(false);
             }}
           >
             아이디 찾기
           </Tab>
           <Tab
-            active={activeTab === 'password'}
+            $active={activeTab === 'password'}
             onClick={() => {
               setActiveTab('password');
               setStep(1);
               setError('');
+              setSuccess('');
               setIsVerificationSent(false);
             }}
           >
@@ -111,31 +140,20 @@ const Recovery = () => {
         </TabGroup>
 
         {error && <ErrorMessage>{error}</ErrorMessage>}
+        {success && <SuccessMessage>{success}</SuccessMessage>}
 
         {step === 1 && activeTab === 'id' && (
-          <>
-            <InputGroup>
-              <Label>이름</Label>
-              <Input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                placeholder="이름을 입력하세요"
-              />
-            </InputGroup>
-
-            <InputGroup>
-              <Label>휴대폰 번호</Label>
-              <Input
-                type="tel"
-                name="phone"
-                value={formData.phone}
-                onChange={handleInputChange}
-                placeholder="휴대폰 번호를 입력하세요"
-              />
-            </InputGroup>
-          </>
+          <InputGroup>
+            <Label>가입한 이메일</Label>
+            <Input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              placeholder="가입 시 사용한 이메일을 입력하세요"
+            />
+            <HelpText>이메일이 곧 아이디입니다.</HelpText>
+          </InputGroup>
         )}
 
         {step === 1 && activeTab === 'password' && (
@@ -146,39 +164,54 @@ const Recovery = () => {
               name="email"
               value={formData.email}
               onChange={handleInputChange}
-              placeholder="이메일을 입력하세요"
+              placeholder="가입 시 사용한 이메일을 입력하세요"
             />
+            <HelpText>비밀번호 재설정 링크가 이메일로 전송됩니다.</HelpText>
           </InputGroup>
         )}
 
-        {step === 2 && (
-          <InputGroup>
-            <Label>인증번호</Label>
-            <VerificationWrapper>
-              <Input
-                type="text"
-                name="verificationCode"
-                value={formData.verificationCode}
-                onChange={handleInputChange}
-                placeholder="인증번호 6자리를 입력하세요"
-                maxLength={6}
-              />
-              <ResendButton
-                type="button"
-                onClick={handleSendVerification}
-              >
-                재발송
-              </ResendButton>
-            </VerificationWrapper>
-          </InputGroup>
+        {step === 2 && activeTab === 'id' && (
+          <ResultBox>
+            <ResultTitle>✅ 계정을 찾았습니다</ResultTitle>
+            <ResultText>{success}</ResultText>
+          </ResultBox>
         )}
 
-        <ActionButton
-          type="button"
-          onClick={step === 1 ? handleSendVerification : handleVerify}
-        >
-          {step === 1 ? '인증번호 받기' : '확인'}
-        </ActionButton>
+        {step === 2 && activeTab === 'password' && (
+          <ResultBox>
+            <ResultTitle>📧 이메일이 전송되었습니다</ResultTitle>
+            <ResultText>{success}</ResultText>
+            <HelpText>
+              이메일이 도착하지 않았다면:
+              <br />
+              1. 스팸 메일함을 확인하세요
+              <br />
+              2. 이메일 주소가 올바른지 확인하세요
+              <br />
+              3. 아래 버튼으로 다시 전송하세요
+            </HelpText>
+          </ResultBox>
+        )}
+
+        {step === 1 && (
+          <ActionButton
+            type="button"
+            onClick={handleSendVerification}
+            disabled={isLoading}
+          >
+            {isLoading ? '처리 중...' : activeTab === 'id' ? '계정 찾기' : '재설정 링크 받기'}
+          </ActionButton>
+        )}
+
+        {step === 2 && activeTab === 'password' && (
+          <ActionButton
+            type="button"
+            onClick={handleSendVerification}
+            disabled={isLoading}
+          >
+            {isLoading ? '처리 중...' : '이메일 다시 보내기'}
+          </ActionButton>
+        )}
 
         <ButtonGroup>
           <BackButton onClick={() => navigate(-1)}>
@@ -230,9 +263,9 @@ const Tab = styled.button`
   padding: 12px;
   background: none;
   border: none;
-  border-bottom: 2px solid ${props => props.active ? 'var(--primary-blue)' : 'transparent'};
-  color: ${props => props.active ? 'var(--primary-blue)' : 'var(--text-light)'};
-  font-weight: ${props => props.active ? '600' : '400'};
+  border-bottom: 2px solid ${props => props.$active ? 'var(--primary-blue)' : 'transparent'};
+  color: ${props => props.$active ? 'var(--primary-blue)' : 'var(--text-light)'};
+  font-weight: ${props => props.$active ? '600' : '400'};
   font-size: 16px;
   cursor: pointer;
   transition: all 0.2s;
@@ -294,9 +327,54 @@ const ErrorMessage = styled.div`
   font-size: 14px;
   margin-bottom: 16px;
   text-align: center;
-  padding: 8px;
-  border-radius: 4px;
-  background-color: var(--error-bg);
+  padding: 12px;
+  border-radius: 8px;
+  background-color: #ffe5e5;
+  border: 1px solid #ffcccc;
+  white-space: pre-line;
+`;
+
+const SuccessMessage = styled.div`
+  color: #155724;
+  font-size: 14px;
+  margin-bottom: 16px;
+  text-align: center;
+  padding: 12px;
+  border-radius: 8px;
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+  white-space: pre-line;
+  line-height: 1.5;
+`;
+
+const HelpText = styled.p`
+  font-size: 13px;
+  color: var(--text-light);
+  margin-top: 8px;
+  line-height: 1.5;
+`;
+
+const ResultBox = styled.div`
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 16px;
+  text-align: center;
+`;
+
+const ResultTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+`;
+
+const ResultText = styled.p`
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.6;
+  white-space: pre-line;
+  margin-bottom: 16px;
 `;
 
 const ActionButton = styled.button`
@@ -310,10 +388,16 @@ const ActionButton = styled.button`
   font-weight: 600;
   cursor: pointer;
   margin-bottom: 16px;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background-color: var(--primary-dark-blue);
+  }
+
+  &:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+    opacity: 0.7;
   }
 `;
 

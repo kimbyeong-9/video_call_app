@@ -1,93 +1,183 @@
 # Video Call App
 
-화상 통화 앱입니다. React + TypeScript + Vite + Supabase로 구성되어 있습니다.
+WebRTC와 Supabase를 활용한 실시간 영상통화 앱입니다.
 
-## 환경 설정
+## 🚀 기술 스택
 
-### 개발 환경
-1. `.env.local` 파일을 생성하고 다음 내용을 추가하세요:
+- **Frontend**: React 18 + Vite
+- **Backend**: Supabase (PostgreSQL + Realtime + Storage + Auth)
+- **WebRTC**: P2P 영상통화
+- **Styling**: Styled Components
+- **Icons**: React Icons
+
+## 📋 주요 기능
+
+### 1. 사용자 인증
+- 이메일/비밀번호 회원가입 및 로그인
+- Google OAuth 로그인
+- 닉네임 중복 확인
+- 프로필 관리 (프로필 이미지, 자기소개, 관심사)
+
+### 2. 실시간 채팅
+- 1:1 채팅방
+- 실시간 메시지 전송/수신
+- 읽지 않은 메시지 개수 표시
+- 채팅방 목록
+
+### 3. 영상통화
+- WebRTC 기반 P2P 영상통화
+- 실시간 통화 수신 알림
+- 음소거/비디오 끄기 기능
+- 통화 상태 표시
+
+### 4. Live 페이지
+- 실시간 사용자 목록
+- 영상통화 발신
+- 빠른 메시지 전송
+
+### 5. 친구 관리
+- 친구 검색
+- 친구 추가/삭제
+- 친구 프로필 보기
+
+## 🛠 설치 및 실행
+
+### 1. 프로젝트 클론
+```bash
+git clone <repository-url>
+cd video_call_app
+npm install
 ```
+
+### 2. 환경 변수 설정
+`.env.local` 파일을 생성하고 다음 내용을 추가하세요:
+```env
 VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-VITE_AUTO_CONFIRM_EMAIL=true
+VITE_AUTO_CONFIRM_EMAIL=true  # 개발 환경에서만 사용
 ```
+
+### 3. Supabase 데이터베이스 설정
+
+1. [Supabase](https://supabase.com)에서 프로젝트 생성
+2. SQL Editor에서 `supabase_schema.sql` 파일 실행
+3. Storage에서 `avatars` 버킷 생성 (Public)
+
+```sql
+-- supabase_schema.sql 파일의 내용을 Supabase SQL Editor에 복사하여 실행
+```
+
+### 4. 개발 서버 실행
+```bash
+npm run dev
+```
+
+## 📁 프로젝트 구조
+
+```
+src/
+├── components/
+│   ├── common/          # 공통 컴포넌트
+│   │   ├── IncomingCallModal.jsx
+│   │   └── ProtectedRoute.jsx
+│   └── layout/          # 레이아웃 컴포넌트
+│       ├── MainLayout.jsx
+│       └── ChattingLayout.jsx
+├── contexts/            # Context API
+│   └── UnreadMessagesContext.jsx
+├── pages/               # 페이지 컴포넌트
+│   ├── Home/
+│   ├── Login/
+│   ├── Signup/
+│   ├── Chatlist/
+│   ├── Chatting/
+│   ├── Live/
+│   ├── VideoCall/
+│   ├── Friends/
+│   └── Profiles/
+├── routes/              # 라우팅
+│   └── Router.jsx
+├── utils/               # 유틸리티 함수
+│   ├── supabase.js
+│   └── webrtc.js
+└── App.jsx
+```
+
+## 🎯 사용 방법
+
+### 영상통화 테스트
+
+자세한 테스트 방법은 [TEST_GUIDE.md](./TEST_GUIDE.md)를 참조하세요.
+
+**간단한 테스트 방법:**
+1. 시크릿 창과 일반 창에서 각각 다른 계정으로 로그인
+2. Live 페이지로 이동
+3. 한 창에서 "영상통화" 버튼 클릭
+4. 다른 창에서 수신 알림 확인 및 "수락" 클릭
+5. 영상통화 시작
+
+## 🔒 보안 주의사항
+
+### 개발 환경
+- `VITE_AUTO_CONFIRM_EMAIL=true`는 개발 환경에서만 사용
+- 이메일 확인 없이 회원가입이 가능하도록 설정
 
 ### 배포 환경
-**중요**: 실제 배포 시에는 `VITE_AUTO_CONFIRM_EMAIL`을 제거하거나 `false`로 설정하세요.
-- 이메일 확인을 비활성화하면 보안상 위험할 수 있습니다.
-- 실제 서비스에서는 사용자가 이메일을 확인하도록 해야 합니다.
+**중요**: 실제 배포 시에는 다음 사항을 반드시 확인하세요:
+1. `VITE_AUTO_CONFIRM_EMAIL`을 제거하거나 `false`로 설정
+2. Supabase RLS (Row Level Security) 정책 확인
+3. API 키 보안 확인
+4. HTTPS 사용 (WebRTC는 HTTPS 또는 localhost에서만 작동)
 
-## 기능
-- 회원가입/로그인 (Supabase Auth)
-- 닉네임 중복 확인
-- 사용자 관리
+## 🗄 데이터베이스 스키마
 
-Currently, two official plugins are available:
+### users
+- id (UUID, PK)
+- email (TEXT, UNIQUE)
+- nickname (TEXT, UNIQUE)
+- bio (TEXT)
+- interests (TEXT[])
+- profile_image (TEXT)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### messages
+- id (UUID, PK)
+- room_id (TEXT)
+- user_id (UUID, FK)
+- content (TEXT)
 
-## React Compiler
+### video_calls
+- id (UUID, PK)
+- caller_id (UUID, FK)
+- receiver_id (UUID, FK)
+- status (TEXT) - pending, ringing, active, ended, declined
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### webrtc_signals
+- id (UUID, PK)
+- call_id (UUID, FK)
+- sender_id (UUID, FK)
+- signal_type (TEXT) - offer, answer, ice-candidate
+- signal_data (JSONB)
 
-## Expanding the ESLint configuration
+## 🐛 문제 해결
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 웹캠/마이크가 작동하지 않는 경우
+- 브라우저 설정에서 카메라/마이크 권한 확인
+- HTTPS 또는 localhost에서만 작동 (HTTP는 불가)
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 수신 통화가 표시되지 않는 경우
+- 콘솔 로그 확인 ("🔵 Live - 수신 통화 구독 시작")
+- Supabase Realtime이 활성화되어 있는지 확인
+- `video_calls` 테이블에 데이터가 정상적으로 삽입되는지 확인
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### 영상통화 연결이 안 되는 경우
+- 콘솔에서 WebRTC 연결 상태 확인
+- 방화벽/NAT 설정 확인
+- STUN/TURN 서버 설정 확인
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## 🤝 기여
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+이슈나 Pull Request를 환영합니다!
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 📄 라이선스
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+MIT License

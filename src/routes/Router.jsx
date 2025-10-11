@@ -11,6 +11,7 @@ import Home from '../pages/Home';
 import Login from '../pages/Login';
 import Signup from '../pages/Signup';
 import Recovery from '../pages/Recovery';
+import ResetPassword from '../pages/ResetPassword';
 import Chatlist from '../pages/Chatlist';
 import Chatting from '../pages/Chatting';
 import Auth from '../pages/Auth';
@@ -41,6 +42,10 @@ const AppRoutes = () => {
     {
       path: 'recovery',
       element: <Recovery />
+    },
+    {
+      path: 'reset-password',
+      element: <ResetPassword />
     },
     {
       path: 'auth',

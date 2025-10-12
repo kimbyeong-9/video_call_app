@@ -105,10 +105,33 @@ export const UnreadMessagesProvider = ({ children }) => {
       const currentLastReadTimes = loadLastReadTimes(currentUser.id);
       console.log('🔵 마지막 읽은 시간들:', currentLastReadTimes);
 
-      // 1. 모든 메시지 가져오기
+      // 1. 현재 사용자가 보낸 메시지가 있는 채팅방 ID 찾기
+      const { data: myMessagesData, error: myMessagesError } = await supabase
+        .from('messages')
+        .select('room_id')
+        .eq('user_id', currentUser.id);
+
+      if (myMessagesError) {
+        console.error('❌ 내 메시지 조회 오류:', myMessagesError);
+        return;
+      }
+
+      if (!myMessagesData || myMessagesData.length === 0) {
+        console.log('🔵 참여 중인 채팅방 없음');
+        setUnreadCount(0);
+        setUnreadByRoom({});
+        return;
+      }
+
+      // 2. 현재 사용자가 참여한 채팅방 ID 목록 (중복 제거)
+      const userRoomIds = [...new Set(myMessagesData.map(msg => msg.room_id))];
+      console.log('🔵 참여 중인 채팅방:', userRoomIds);
+
+      // 3. 해당 채팅방들의 모든 메시지 가져오기
       const { data: messagesData, error } = await supabase
         .from('messages')
         .select('id, room_id, user_id, created_at')
+        .in('room_id', userRoomIds)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -122,19 +145,7 @@ export const UnreadMessagesProvider = ({ children }) => {
         return;
       }
 
-      // 2. 현재 사용자가 참여한 채팅방 찾기
-      const userRoomIds = [...new Set(
-        messagesData
-          .filter(msg =>
-            msg.user_id === currentUser.id ||
-            messagesData.some(m => m.room_id === msg.room_id && m.user_id !== currentUser.id)
-          )
-          .map(msg => msg.room_id)
-      )];
-
-      console.log('🔵 참여 중인 채팅방:', userRoomIds);
-
-      // 3. 각 채팅방별 읽지 않은 메시지 개수 계산 (마지막 읽은 시간 이후만)
+      // 4. 각 채팅방별 읽지 않은 메시지 개수 계산 (마지막 읽은 시간 이후만)
       const unreadByRoomData = {};
       let totalUnread = 0;
 

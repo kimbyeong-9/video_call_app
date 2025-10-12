@@ -3,7 +3,40 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce'
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'supabase-js-web'
+    },
+    fetch: (url, options = {}) => {
+      // QUIC 프로토콜 에러 방지를 위해 HTTP/1.1 강제 사용
+      return fetch(url, {
+        ...options,
+        // 재시도 로직 추가
+        signal: options.signal || AbortSignal.timeout(15000), // 15초 타임아웃
+      }).catch(async (error) => {
+        // ERR_QUIC_PROTOCOL_ERROR 시 재시도
+        if (error.message.includes('QUIC') || error.message.includes('Failed to fetch')) {
+          console.warn('⚠️ 네트워크 에러 발생, 재시도 중...', error.message);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기
+          return fetch(url, options);
+        }
+        throw error;
+      });
+    }
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  }
+});
 
 // Auth 관련 유틸리티 함수들
 export const auth = {
@@ -31,12 +64,7 @@ export const auth = {
         return { error: new Error('사용자 생성에 실패했습니다.') };
       }
 
-      // 2. 이메일 확인 처리 (개발 환경에서만 자동 확인)
-      if (import.meta.env.DEV || import.meta.env.VITE_AUTO_CONFIRM_EMAIL === 'true') {
-        await supabase.rpc('confirm_user_email', { user_email: email });
-      }
-
-      // 3. users 테이블에 추가 정보 저장
+      // 2. users 테이블에 추가 정보 저장
       const { data: userData, error: userError } = await supabase
         .from('users')
         .insert([

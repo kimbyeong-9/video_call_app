@@ -54,7 +54,15 @@ const VideoCall = () => {
 
   const initCall = async () => {
     try {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('🔵 [VideoCall] 통화 초기화 시작');
+      console.log('🔵 [VideoCall] Call ID:', callId);
+      console.log('🔵 [VideoCall] Mode:', mode);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
       const currentUserStr = localStorage.getItem('currentUser');
+      console.log('🔵 [VideoCall] localStorage.currentUser:', currentUserStr);
+      
       if (!currentUserStr) {
         alert('로그인이 필요합니다.');
         navigate('/login');
@@ -62,9 +70,16 @@ const VideoCall = () => {
       }
 
       const currentUser = JSON.parse(currentUserStr);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('✅ [VideoCall] 현재 사용자 정보:');
+      console.log('   - ID:', currentUser.id);
+      console.log('   - Email:', currentUser.email);
+      console.log('   - Nickname:', currentUser.nickname);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       // WebRTC Manager 초기화
       webrtcManagerRef.current = new WebRTCManager(callId, currentUser.id);
+      console.log('✅ [VideoCall] WebRTCManager 생성 완료, currentUserId:', currentUser.id);
 
       // 로컬 스트림 획득
       const stream = await webrtcManagerRef.current.getLocalStream();

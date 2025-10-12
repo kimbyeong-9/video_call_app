@@ -78,18 +78,25 @@ const Chatting = () => {
 
           console.log('🔵 발신자 정보 포함된 메시지:', messageWithSender);
           setMessages((prev) => [...prev, messageWithSender]);
+
+          // 새 메시지가 도착하면 읽음 처리 (상대방의 메시지인 경우)
+          if (payload.new.user_id !== currentUser?.id) {
+            console.log('🔵 상대방의 새 메시지, 읽음 처리');
+            markRoomAsRead(roomId);
+          }
         }
       )
       .subscribe((status) => {
         console.log('🔵 Realtime 구독 상태:', status);
       });
 
-    // 3️⃣ 컴포넌트 종료 시 구독 해제
+    // 3️⃣ 컴포넌트 종료 시 구독 해제 및 읽음 처리
     return () => {
-      console.log('🔵 실시간 구독 해제');
+      console.log('🔵 실시간 구독 해제 및 최종 읽음 처리');
+      markRoomAsRead(roomId);
       supabase.removeChannel(channel);
     };
-  }, [roomId]);
+  }, [roomId, currentUser, markRoomAsRead]);
 
   // 4️⃣ 새 메시지가 추가되면 스크롤을 맨 아래로
   useEffect(() => {

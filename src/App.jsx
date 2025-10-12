@@ -29,6 +29,18 @@ function App() {
         if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
           console.log('🔵 App.jsx - 로그인 성공 감지, 사용자 정보 업데이트');
 
+          // 로그인 방법 확인
+          const loginProvider = session.user.app_metadata?.provider || 'email';
+          const isSocialLogin = loginProvider !== 'email';
+
+          // SIGNED_IN 이벤트는 새로운 로그인 시에만 발생
+          if (event === 'SIGNED_IN') {
+            // 로그인 성공 플래그 저장 (로그인 방법 구분)
+            sessionStorage.setItem('socialLoginSuccess', 'true');
+            sessionStorage.setItem('loginMethod', loginProvider);
+            console.log(`✅ App.jsx - ${loginProvider} 로그인 완료 플래그 설정`);
+          }
+
           // 먼저 기본 정보로 빠르게 저장
           const basicSession = {
             id: session.user.id,

@@ -25,6 +25,7 @@ import Notices from '../pages/Notices';
 import Terms from '../pages/Terms';
 import Settings from '../pages/Settings';
 import VideoCall from '../pages/VideoCall';
+import SessionInfo from '../pages/Debug/SessionInfo';
 
 const AppRoutes = () => {
   const currentUserId = useContext(CurrentUserContext);
@@ -122,6 +123,10 @@ const AppRoutes = () => {
         {
           path: 'settings',
           element: <Settings />
+        },
+        {
+          path: 'debug/session',
+          element: <SessionInfo />
         }
       ]
     },

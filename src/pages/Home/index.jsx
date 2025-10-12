@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { FiVideo, FiHeart, FiMessageCircle, FiSettings, FiStar, FiMapPin, FiGlobe, FiChevronLeft, FiChevronRight, FiShuffle, FiZap } from 'react-icons/fi';
+import { FiVideo, FiHeart, FiMessageCircle, FiSettings, FiStar, FiChevronLeft, FiChevronRight, FiShuffle, FiZap } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
+import NotificationPopup from '../../components/common/NotificationPopup';
 
 const Home = () => {
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [recommendedUsers, setRecommendedUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -16,32 +16,61 @@ const Home = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const sliderRef = useRef(null);
+  const [notification, setNotification] = useState({
+    show: false,
+    message: '',
+    type: 'success'
+  });
 
   useEffect(() => {
     loadUserData();
+
+    // 소셜 로그인 성공 확인 (더 정확한 검증)
+    const socialLoginSuccess = sessionStorage.getItem('socialLoginSuccess');
+    const loginMethod = sessionStorage.getItem('loginMethod');
+    
+    if (socialLoginSuccess === 'true' && loginMethod === 'google') {
+      setNotification({
+        show: true,
+        message: 'Google 로그인에 성공했습니다.',
+        type: 'success'
+      });
+      
+      // 3초 후 알림 자동 닫기
+      setTimeout(() => {
+        setNotification(prev => ({ ...prev, show: false }));
+      }, 3000);
+      
+      // 플래그 제거 (한 번만 표시)
+      sessionStorage.removeItem('socialLoginSuccess');
+      sessionStorage.removeItem('loginMethod');
+    } else if (socialLoginSuccess === 'true' && loginMethod === 'email') {
+      setNotification({
+        show: true,
+        message: '로그인에 성공했습니다.',
+        type: 'success'
+      });
+      
+      // 3초 후 알림 자동 닫기
+      setTimeout(() => {
+        setNotification(prev => ({ ...prev, show: false }));
+      }, 3000);
+      
+      // 플래그 제거
+      sessionStorage.removeItem('socialLoginSuccess');
+      sessionStorage.removeItem('loginMethod');
+    }
   }, []);
 
   const loadUserData = async () => {
     try {
-      console.log('🔵 Home - 사용자 데이터 로드 시작');
-      
       // 현재 Supabase Auth 세션 확인
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      console.log('🔵 Home - 현재 Auth 세션:', session);
       
-      if (sessionError) {
-        console.error('❌ Home - 세션 확인 오류:', sessionError);
+      if (sessionError || !session?.user) {
         setIsLoading(false);
         return;
       }
-
-      if (!session?.user) {
-        console.log('❌ Home - 로그인된 사용자 없음');
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('🔵 Home - 현재 Auth 사용자:', session.user.email, session.user.id);
 
       // users 테이블에서 사용자 프로필 데이터 가져오기
       const { data: profileData, error: profileError } = await supabase
@@ -50,12 +79,8 @@ const Home = () => {
         .eq('id', session.user.id)
         .single();
 
-      console.log('🔵 Home - Supabase 응답:', { profileData, profileError });
-
       if (profileError) {
-        console.error('❌ Home - 프로필 로드 오류:', profileError);
-        
-        // 오류가 발생해도 기본 정보로 프로필 표시
+        // 오류 발생 시 기본 정보로 프로필 표시
         const fallbackProfile = {
           id: session.user.id,
           email: session.user.email,
@@ -67,20 +92,8 @@ const Home = () => {
         };
         
         setUserProfile(fallbackProfile);
-        setCurrentUser({
-          id: session.user.id,
-          email: session.user.email,
-          nickname: fallbackProfile.nickname
-        });
-        
       } else {
-        console.log('✅ Home - 프로필 데이터 로드 성공:', profileData);
         setUserProfile(profileData);
-        setCurrentUser({
-          id: profileData.id,
-          email: profileData.email,
-          nickname: profileData.nickname
-        });
       }
 
       // 추천 사용자들 가져오기 (현재 사용자 제외)
@@ -92,13 +105,10 @@ const Home = () => {
 
       if (users && !usersError) {
         setRecommendedUsers(users);
-        console.log('✅ Home - 추천 사용자 로드 성공:', users.length + '명');
-      } else {
-        console.error('❌ Home - 추천 사용자 로드 오류:', usersError);
       }
       
     } catch (error) {
-      console.error('❌ Home - 데이터 로드 중 오류:', error);
+      console.error('Home 데이터 로드 오류:', error);
     } finally {
       setIsLoading(false);
     }
@@ -209,6 +219,13 @@ const Home = () => {
 
   return (
     <HomeWrapper>
+      {notification.show && (
+        <NotificationPopup
+          message={notification.message}
+          type={notification.type}
+          onClose={() => setNotification(prev => ({ ...prev, show: false }))}
+        />
+      )}
       <Content>
         {/* 나의 프로필 섹션 */}
         <MyProfileSection>

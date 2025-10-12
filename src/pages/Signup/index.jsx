@@ -124,13 +124,14 @@ const Signup = () => {
     }
 
     try {
+      // maybeSingle() 사용으로 에러 처리 개선
       const { data, error } = await supabase
         .from('users')
         .select('nickname')
         .eq('nickname', formData.nickname)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116는 결과가 없을 때의 에러 코드
+      if (error) {
         throw error;
       }
 

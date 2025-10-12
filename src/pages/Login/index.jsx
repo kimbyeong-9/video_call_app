@@ -95,30 +95,13 @@ const Login = () => {
       if (authError) {
         console.log('🔵 Login - Auth 오류:', authError.message);
         
-        // 더 정확한 오류 메시지 처리
+        // 보안 강화: 이메일/비밀번호 구분 없이 통일된 메시지
         if (authError.message.includes('Invalid login credentials')) {
-          // 이메일 존재 여부 확인
-          const { data: emailCheck } = await supabase
-            .from('users')
-            .select('email')
-            .eq('email', formData.email)
-            .single();
-
-          console.log('🔵 Login - 이메일 확인 결과:', emailCheck);
-
-          if (!emailCheck) {
-            setNotification({
-              show: true,
-              message: '등록되지 않은 아이디입니다.',
-              type: 'error'
-            });
-          } else {
-            setNotification({
-              show: true,
-              message: '비밀번호가 일치하지 않습니다.',
-              type: 'error'
-            });
-          }
+          setNotification({
+            show: true,
+            message: '이메일 또는 비밀번호가 일치하지 않습니다.',
+            type: 'error'
+          });
         } else if (authError.message.includes('Email not confirmed')) {
           setNotification({
             show: true,
@@ -214,12 +197,9 @@ const Login = () => {
             type: 'error'
           });
         } else {
-          console.log('🔵 Login - Google 소셜 로그인 성공, 리다이렉트 예정');
-          setNotification({
-            show: true,
-            message: 'Google 로그인에 성공했습니다.',
-            type: 'success'
-          });
+          // OAuth 리다이렉트가 발생하므로 여기서는 알림을 표시하지 않음
+          // 로그인 완료 후 App.jsx의 onAuthStateChange에서 처리됨
+          console.log('🔵 Login - Google 소셜 로그인 리다이렉트 시작...');
         }
         // 성공 시 자동으로 리다이렉트됩니다
         // App.jsx에서 onAuthStateChange로 localStorage가 업데이트됩니다

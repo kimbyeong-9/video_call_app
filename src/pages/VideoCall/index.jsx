@@ -21,6 +21,7 @@ const VideoCall = () => {
   const [localUserInfo, setLocalUserInfo] = useState(null);
   const [remoteUserInfo, setRemoteUserInfo] = useState(null);
   const [remoteVideoEnabled, setRemoteVideoEnabled] = useState(true);
+  const [showEndModal, setShowEndModal] = useState(false);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -152,6 +153,15 @@ const VideoCall = () => {
         onVideoToggle: (enabled) => {
           console.log('📹 [VideoCall] 상대방 비디오 상태 변경:', enabled);
           setRemoteVideoEnabled(enabled);
+        },
+        onCallEnd: () => {
+          console.log('☎️ [VideoCall] 상대방이 통화 종료');
+          setShowEndModal(true);
+          // 2초 후 자동으로 Live 페이지로 이동
+          setTimeout(async () => {
+            await cleanup();
+            navigate('/live');
+          }, 2000);
         }
       });
 
@@ -196,12 +206,23 @@ const VideoCall = () => {
   const handleEndCall = async () => {
     console.log('🔵 [VideoCall] 통화 종료 시작');
     try {
+      // 현재 사용자 정보 가져오기
+      const currentUserStr = localStorage.getItem('currentUser');
+      const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
+
+      // 상대방에게 통화 종료 시그널 전송
+      if (currentUser) {
+        await videoCall.sendCallEnd(callId, currentUser.id);
+        console.log('✅ [VideoCall] 통화 종료 시그널 전송 완료');
+      }
+
+      // 통화 상태 업데이트
       await videoCall.updateCallStatus(callId, 'ended');
       console.log('✅ [VideoCall] 통화 상태 업데이트 완료');
     } catch (error) {
-      console.error('❌ [VideoCall] 통화 상태 업데이트 실패:', error);
+      console.error('❌ [VideoCall] 통화 종료 처리 실패:', error);
     }
-    
+
     await cleanup();
     console.log('✅ [VideoCall] cleanup 완료, Live 페이지로 이동');
     navigate('/live');
@@ -301,6 +322,18 @@ const VideoCall = () => {
           <FiPhoneOff size={24} />
         </EndCallButton>
       </ControlBar>
+
+      {/* 통화 종료 모달 */}
+      {showEndModal && (
+        <EndCallModal>
+          <EndCallModalContent>
+            <EndCallIcon>
+              <FiPhoneOff size={48} />
+            </EndCallIcon>
+            <EndCallMessage>통화가 종료되었습니다</EndCallMessage>
+          </EndCallModalContent>
+        </EndCallModal>
+      )}
     </CallContainer>
   );
 };
@@ -566,6 +599,87 @@ const EndCallButton = styled.button`
 
   &:active {
     transform: scale(0.95);
+  }
+`;
+
+const EndCallModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+  animation: fadeIn 0.3s ease;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+`;
+
+const EndCallModalContent = styled.div`
+  background: rgba(255, 255, 255, 0.95);
+  padding: 40px 60px;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+`;
+
+const EndCallIcon = styled.div`
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #F44336;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  animation: fadeInScale 0.4s ease;
+
+  @keyframes fadeInScale {
+    from {
+      transform: scale(0.5);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+`;
+
+const EndCallMessage = styled.div`
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  text-align: center;
+
+  @media (min-width: 768px) {
+    font-size: 28px;
   }
 `;
 

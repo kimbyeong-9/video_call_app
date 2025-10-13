@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiVideo } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
 import { videoCall, WebRTCManager } from '../../utils/webrtc';
-import { onlineStatusManager } from '../../utils/onlineStatus';
+import { livePresenceManager } from '../../utils/livePresence';
 
 const Live = () => {
   const navigate = useNavigate();
@@ -13,14 +13,13 @@ const Live = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
-  const [onlineUsers, setOnlineUsers] = useState(new Map()); // 온라인 사용자 상태
 
-  // 사용자 목록 로드
+  // Presence 기반 실시간 접속 유저 관리
   useEffect(() => {
     let isMounted = true;
-    let debounceTimer = null;
+    let unsubscribePresence = null;
 
-    const loadUsers = async () => {
+    const initializePresence = async () => {
       try {
         // 현재 로그인한 사용자 정보 가져오기
         const storedUser = localStorage.getItem('currentUser');
@@ -31,130 +30,69 @@ const Live = () => {
         }
 
         const user = JSON.parse(storedUser);
-        if (isMounted && !currentUser) {
+        if (isMounted) {
           setCurrentUser(user);
           console.log('🔵 Live - 현재 사용자:', user.id);
         }
 
-        // Supabase에서 온라인 사용자만 가져오기 (자기 자신 제외)
-        const { data: usersData, error } = await supabase
-          .from('users')
-          .select(`
-            id, 
-            nickname, 
-            email, 
-            bio, 
-            interests, 
-            profile_image,
-            online_status:user_online_status!user_id(is_online, last_seen)
-          `)
-          .neq('id', user.id) // 자기 자신 제외
-          .order('created_at', { ascending: false });
+        // Presence 채널에 참여
+        const joined = await livePresenceManager.join(user.id, {
+          nickname: user.nickname,
+          email: user.email,
+          profile_image: user.profile_image,
+          bio: user.bio,
+          interests: user.interests,
+        });
 
-        if (error) {
-          console.error('❌ Live - 사용자 목록 조회 오류:', error);
-          if (isMounted) setUsers([]);
+        if (!joined) {
+          console.error('❌ Live - Presence 참여 실패');
+          if (isMounted) setLoading(false);
           return;
         }
 
-        console.log('🔵 Live - 전체 사용자 목록:', usersData);
+        // Presence 상태 변경 리스너 등록
+        unsubscribePresence = livePresenceManager.onPresenceChange((onlineUsers) => {
+          console.log('🔵 Live - 접속 중인 유저 업데이트:', onlineUsers.length, '명');
 
-        // 온라인 사용자만 필터링
-        const onlineUsersData = usersData.filter(u => {
-          const onlineStatus = Array.isArray(u.online_status) ? u.online_status[0] : u.online_status;
-          return onlineStatus && onlineStatus.is_online === true;
+          // 프로필 이미지가 없는 경우 기본 이미지 설정
+          const usersWithImages = onlineUsers.map(u => ({
+            ...u,
+            profileImage: u.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.nickname}`,
+            interests: u.interests || [],
+            bio: u.bio || '안녕하세요!',
+          }));
+
+          if (isMounted) {
+            setUsers(usersWithImages);
+            setLoading(false);
+          }
         });
 
-        console.log('🔵 Live - 온라인 사용자 목록:', onlineUsersData);
-
-        // 프로필 이미지가 없는 경우 기본 이미지 설정
-        const usersWithImages = onlineUsersData.map(u => ({
-          ...u,
-          profileImage: u.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.nickname}`,
-          interests: u.interests || [],
-          bio: u.bio || '안녕하세요!',
-          status: '온라인',
-          statusType: 'online'
-        }));
-
-        if (isMounted) setUsers(usersWithImages);
+        console.log('✅ Live - Presence 초기화 완료');
       } catch (error) {
-        console.error('❌ Live - 사용자 로드 오류:', error);
-        if (isMounted) setUsers([]);
-      } finally {
-        if (isMounted) setLoading(false);
+        console.error('❌ Live - Presence 초기화 오류:', error);
+        if (isMounted) {
+          setUsers([]);
+          setLoading(false);
+        }
       }
     };
 
-    // 디바운스된 로드 함수
-    const debouncedLoadUsers = () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        if (isMounted) loadUsers();
-      }, 1000); // 1초 디바운스
-    };
-
-    loadUsers();
-
-    // 실시간 온라인 상태 업데이트 구독
-    console.log('🔵 Live - 실시간 온라인 상태 구독 설정');
-
-    const channel = supabase
-      .channel('realtime:live-online-status')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // INSERT, UPDATE, DELETE 모두 감지
-          schema: 'public',
-          table: 'user_online_status'
-        },
-        (payload) => {
-          console.log('🔵 Live - 온라인 상태 변경 감지:', payload);
-          debouncedLoadUsers();
-        }
-      )
-      .subscribe((status) => {
-        console.log('🔵 Live - Realtime 구독 상태:', status);
-      });
+    initializePresence();
 
     return () => {
       isMounted = false;
-      if (debounceTimer) clearTimeout(debounceTimer);
-      console.log('🔵 Live - 실시간 구독 해제');
-      supabase.removeChannel(channel);
+      console.log('🔵 Live - cleanup 시작');
+
+      // Presence 리스너 해제
+      if (unsubscribePresence) {
+        unsubscribePresence();
+      }
+
+      // Presence 채널에서 나가기
+      livePresenceManager.leave();
     };
   }, [navigate]);
-
-  // 온라인 상태 관리
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    let unsubscribeStatusChange;
-
-    const initializeOnlineStatus = async () => {
-      try {
-        // 온라인 상태 매니저 초기화
-        await onlineStatusManager.initialize(currentUser.id);
-        
-        // 온라인 상태 변경 구독
-        unsubscribeStatusChange = onlineStatusManager.onStatusChange((statusEntries) => {
-          const newOnlineUsers = new Map(statusEntries);
-          setOnlineUsers(newOnlineUsers);
-        });
-      } catch (error) {
-        console.error('❌ Live - 온라인 상태 초기화 오류:', error);
-      }
-    };
-
-    initializeOnlineStatus();
-
-    return () => {
-      if (unsubscribeStatusChange) {
-        unsubscribeStatusChange();
-      }
-      // cleanup은 호출하지 않음 (싱글톤이므로 다른 페이지에서도 사용 중)
-    };
-  }, [currentUser?.id]);
 
   const handleMessageChange = (userId, value) => {
     setMessages(prev => ({ ...prev, [userId]: value }));

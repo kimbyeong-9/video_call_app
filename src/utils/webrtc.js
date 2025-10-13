@@ -212,6 +212,33 @@ export const videoCall = {
   },
 
   /**
+   * 통화 종료 시그널 전송
+   */
+  sendCallEnd: async (callId, senderId) => {
+    try {
+      console.log('🔵 [sendCallEnd] 통화 종료 시그널 전송:', { callId, senderId });
+
+      const { data, error } = await supabase
+        .from('webrtc_signals')
+        .insert({
+          call_id: callId,
+          sender_id: senderId,
+          signal_type: 'call-end',
+          signal_data: { ended: true }
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      console.log('✅ [sendCallEnd] 통화 종료 시그널 전송 완료');
+      return { data, error: null };
+    } catch (error) {
+      console.error('❌ [sendCallEnd] 통화 종료 시그널 전송 에러:', error);
+      return { data: null, error };
+    }
+  },
+
+  /**
    * 기존 시그널 조회 (수신자가 늦게 진입한 경우)
    */
   getExistingSignals: async (callId, currentUserId) => {
@@ -297,6 +324,10 @@ export const videoCall = {
             case 'video-toggle':
               console.log('📹 [subscribeToSignals] 비디오 토글 신호 처리:', signal_data.enabled);
               callbacks.onVideoToggle?.(signal_data.enabled, sender_id);
+              break;
+            case 'call-end':
+              console.log('☎️ [subscribeToSignals] 통화 종료 신호 처리');
+              callbacks.onCallEnd?.(sender_id);
               break;
             default:
               console.warn('⚠️ [subscribeToSignals] 알 수 없는 시그널 타입:', signal_type);
@@ -732,6 +763,10 @@ export class WebRTCManager {
               console.log('📹 [WebRTC.startSignaling] 기존 비디오 토글 처리:', signal_data.enabled);
               callbacks.onVideoToggle?.(signal_data.enabled);
               break;
+            case 'call-end':
+              console.log('☎️ [WebRTC.startSignaling] 기존 통화 종료 처리');
+              callbacks.onCallEnd?.();
+              break;
             default:
               console.warn('⚠️ [WebRTC.startSignaling] 알 수 없는 시그널 타입:', signal_type);
           }
@@ -787,6 +822,10 @@ export class WebRTCManager {
         onVideoToggle: (enabled) => {
           console.log('📹 [WebRTC.onVideoToggle] 상대방 비디오 상태 변경:', enabled);
           callbacks.onVideoToggle?.(enabled);
+        },
+        onCallEnd: () => {
+          console.log('☎️ [WebRTC.onCallEnd] 상대방이 통화 종료');
+          callbacks.onCallEnd?.();
         }
       }
     );

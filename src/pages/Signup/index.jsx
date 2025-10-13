@@ -123,30 +123,67 @@ const Signup = () => {
       return;
     }
 
+    // 닉네임 유효성 검사
+    if (formData.nickname.length < 2 || formData.nickname.length > 10) {
+      setErrors(prev => ({
+        ...prev,
+        nickname: '닉네임은 2-10자 사이여야 합니다.'
+      }));
+      return;
+    }
+
     try {
-      // maybeSingle() 사용으로 에러 처리 개선
+      console.log('🔵 닉네임 중복 확인 시작:', formData.nickname);
+      
+      // Supabase에서 닉네임 중복 확인
       const { data, error } = await supabase
         .from('users')
         .select('nickname')
         .eq('nickname', formData.nickname)
         .maybeSingle();
 
+      console.log('🔵 닉네임 중복 확인 결과:', { data, error });
+
       if (error) {
-        throw error;
+        console.error('❌ 닉네임 중복 확인 오류:', error);
+        
+        // 권한 오류인 경우
+        if (error.code === 'PGRST301' || error.message?.includes('permission')) {
+          setNotification({
+            show: true,
+            message: '⚠️ Supabase RLS 정책을 수정해주세요. fix_nickname_check.sql 파일을 확인하세요.',
+            type: 'error'
+          });
+        } else {
+          throw error;
+        }
+        return;
       }
 
       if (data) {
+        // 중복된 닉네임
+        console.log('❌ 이미 사용 중인 닉네임:', data.nickname);
         setNotification({
           show: true,
           message: '이미 사용 중인 닉네임입니다.',
           type: 'error'
         });
+        setErrors(prev => ({
+          ...prev,
+          nickname: '이미 사용 중인 닉네임입니다.'
+        }));
       } else {
+        // 사용 가능한 닉네임
+        console.log('✅ 사용 가능한 닉네임');
         setNotification({
           show: true,
-          message: '사용 가능한 닉네임입니다.',
+          message: '✅ 사용 가능한 닉네임입니다.',
           type: 'success'
         });
+        setErrors(prev => ({
+          ...prev,
+          nickname: ''
+        }));
       }
 
       // 3초 후 알림 자동 닫기
@@ -154,12 +191,17 @@ const Signup = () => {
         setNotification(prev => ({ ...prev, show: false }));
       }, 3000);
     } catch (error) {
-      console.error('닉네임 중복 확인 실패:', error);
+      console.error('❌ 닉네임 중복 확인 실패:', error);
       setNotification({
         show: true,
         message: '닉네임 중복 확인에 실패했습니다. 다시 시도해주세요.',
         type: 'error'
       });
+      
+      // 5초 후 알림 자동 닫기
+      setTimeout(() => {
+        setNotification(prev => ({ ...prev, show: false }));
+      }, 5000);
     }
   };
 

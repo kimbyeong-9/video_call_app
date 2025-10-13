@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiCamera, FiX } from 'react-icons/fi';
-import { myProfileData } from '../../data/MyProfileData';
 import { profile, supabase } from '../../utils/supabase';
 import NotificationPopup from '../../components/common/NotificationPopup';
 
@@ -61,13 +60,13 @@ const EditProfile = () => {
   
   const [currentUser, setCurrentUser] = useState(null);
   const [formData, setFormData] = useState({
-    profileImage: myProfileData.profileImage,
-    nickname: myProfileData.nickname,
-    bio: myProfileData.bio || '',
+    profileImage: '',
+    nickname: '',
+    bio: '',
     interests: [], // 관심사 배열
   });
 
-  const [previewImage, setPreviewImage] = useState(myProfileData.profileImage);
+  const [previewImage, setPreviewImage] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState({
@@ -106,12 +105,12 @@ const EditProfile = () => {
 
       if (data) {
         setFormData({
-          profileImage: data.profile_image || myProfileData.profileImage,
+          profileImage: data.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.nickname || 'user'}`,
           nickname: data.nickname || '',
           bio: data.bio || '',
           interests: data.interests || [],
         });
-        setPreviewImage(data.profile_image || myProfileData.profileImage);
+        setPreviewImage(data.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.nickname || 'user'}`);
       }
     } catch (error) {
       console.error('사용자 정보 로드 오류:', error);

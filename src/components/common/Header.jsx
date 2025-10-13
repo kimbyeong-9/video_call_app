@@ -3,18 +3,20 @@ import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiBell, FiSettings, FiLogOut, FiFileText, FiShield } from 'react-icons/fi';
 import LogoImage from '../../assets/images/logo/travo_logo.png';
-import { myProfileData } from '../../data/MyProfileData';
-import NotificationPopup from './NotificationPopup';
 import { supabase } from '../../utils/supabase';
+import NotificationPopup from './NotificationPopup';
 
 const Header = () => {
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
   const notificationRef = useRef(null);
   const settingsRef = useRef(null);
 
   useEffect(() => {
+    loadUserProfile();
+    
     const handleClickOutside = (event) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setShowNotifications(false);
@@ -29,6 +31,32 @@ const Header = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  const loadUserProfile = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: profileData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profileData) {
+          setUserProfile(profileData);
+        } else {
+          // fallback to auth user data
+          setUserProfile({
+            id: session.user.id,
+            nickname: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || '사용자',
+            profile_image: session.user.user_metadata?.avatar_url || null
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Header 사용자 프로필 로드 오류:', error);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -59,13 +87,6 @@ const Header = () => {
 
   return (
     <HeaderWrapper>
-      <ProfileSection onClick={() => navigate('/profiles/me')}>
-        <ProfileImage 
-          src={myProfileData.profileImage}
-          alt="profile" 
-        />
-      </ProfileSection>
-
       <LogoSection onClick={() => navigate('/')}>
         <Logo src={LogoImage} alt="Travo" />
       </LogoSection>
@@ -128,8 +149,7 @@ const Header = () => {
 
 const HeaderWrapper = styled.header`
   width: 100%;
-  height: 60px;
-  padding: 0 16px;
+  padding: 20px 16px;
   background-color: #ffffff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
   display: flex;
@@ -140,41 +160,7 @@ const HeaderWrapper = styled.header`
   z-index: 100;
 `;
 
-const ProfileSection = styled.div`
-  width: 36px;
-  height: 36px;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-
-  &:hover {
-    transform: scale(1.05);
-  }
-
-  &:active {
-    transform: scale(0.95);
-  }
-`;
-
-const ProfileImage = styled.img`
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--primary-blue);
-  padding: 2px;
-  box-shadow: 0 2px 4px rgba(43, 87, 154, 0.1);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-
-  &:hover {
-    border-color: var(--primary-dark-blue);
-    box-shadow: 0 2px 8px rgba(43, 87, 154, 0.2);
-  }
-`;
-
 const LogoSection = styled.div`
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   cursor: pointer;
 `;
 

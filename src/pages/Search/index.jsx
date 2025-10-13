@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { FiSearch } from 'react-icons/fi';
 import { IoIosArrowDown, IoIosArrowUp } from 'react-icons/io';
 import { supabase } from '../../utils/supabase';
-import { friendsData } from '../../data/FriendsData';
 
 const Search = () => {
   const navigate = useNavigate();
@@ -38,38 +37,24 @@ const Search = () => {
 
   const loadRecommendedUsers = async () => {
     try {
-      console.log('🔵 Search - 추천 사용자 로드 시작');
-
       // Supabase에서 최근 가입한 사용자들을 추천으로 표시 (자기 자신 제외)
       const { data: users, error } = await supabase
         .from('users')
-        .select('id, nickname, email, bio, profile_image, created_at')
+        .select('id, nickname, email, bio, profile_image, created_at, interests')
         .neq('id', currentUserId)
         .order('created_at', { ascending: false })
         .limit(5);
 
-      console.log('🔵 Search - 추천 사용자 조회 결과:', { users, error });
-
       if (error) {
-        console.error('❌ Search - 추천 사용자 조회 오류:', error);
-        // 오류 시 하드코딩된 데이터 사용 (자기 자신 제외)
-        const filteredData = friendsData.filter(user => user.id !== currentUserId).slice(0, 5);
-        setRecommendedUsers(filteredData);
+        console.error('Search - 추천 사용자 조회 오류:', error);
+        setRecommendedUsers([]);
         return;
       }
 
-      if (users && users.length > 0) {
-        setRecommendedUsers(users);
-      } else {
-        // 데이터가 없으면 하드코딩된 데이터 사용 (자기 자신 제외)
-        const filteredData = friendsData.filter(user => user.id !== currentUserId).slice(0, 5);
-        setRecommendedUsers(filteredData);
-      }
+      setRecommendedUsers(users || []);
     } catch (error) {
-      console.error('❌ Search - 추천 사용자 로드 오류:', error);
-      // 오류 시 하드코딩된 데이터 사용 (자기 자신 제외)
-      const filteredData = friendsData.filter(user => user.id !== currentUserId).slice(0, 5);
-      setRecommendedUsers(filteredData);
+      console.error('Search - 추천 사용자 로드 오류:', error);
+      setRecommendedUsers([]);
     }
   };
 
@@ -83,38 +68,25 @@ const Search = () => {
 
     try {
       setLoading(true);
-      console.log('🔵 Search - 사용자 검색 시작:', searchTerm);
 
       // Supabase에서 사용자 검색 (닉네임 또는 이메일로 검색, 자기 자신 제외)
       const { data: users, error } = await supabase
         .from('users')
-        .select('id, nickname, email, bio, profile_image, created_at')
+        .select('id, nickname, email, bio, profile_image, created_at, interests')
         .or(`nickname.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
         .neq('id', currentUserId)
         .limit(20);
 
-      console.log('🔵 Search - 검색 결과:', { users, error });
-
       if (error) {
-        console.error('❌ Search - 검색 오류:', error);
-        // 오류 시 하드코딩된 데이터에서 검색 (자기 자신 제외)
-        const filteredUsers = friendsData.filter(user =>
-          user.nickname.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          user.id !== currentUserId
-        );
-        setSearchResults(filteredUsers);
+        console.error('Search - 검색 오류:', error);
+        setSearchResults([]);
         return;
       }
 
       setSearchResults(users || []);
     } catch (error) {
-      console.error('❌ Search - 검색 중 오류:', error);
-      // 오류 시 하드코딩된 데이터에서 검색 (자기 자신 제외)
-      const filteredUsers = friendsData.filter(user =>
-        user.nickname.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        user.id !== currentUserId
-      );
-      setSearchResults(filteredUsers);
+      console.error('Search - 검색 중 오류:', error);
+      setSearchResults([]);
     } finally {
       setLoading(false);
     }

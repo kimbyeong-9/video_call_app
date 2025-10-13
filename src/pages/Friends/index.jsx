@@ -1,46 +1,106 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { friendsData } from '../../data/FriendsData';
+import { supabase } from '../../utils/supabase';
 
 const Friends = () => {
   const navigate = useNavigate();
+  const [friends, setFriends] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadFriends();
+  }, []);
+
+  const loadFriends = async () => {
+    try {
+      // 현재 사용자 제외한 모든 사용자 가져오기
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setIsLoading(false);
+        return;
+      }
+
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('*')
+        .neq('id', session.user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('친구 목록 로드 오류:', error);
+        setFriends([]);
+      } else {
+        setFriends(users || []);
+      }
+    } catch (error) {
+      console.error('친구 목록 로드 중 오류:', error);
+      setFriends([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <FriendsWrapper>
+        <CategoryTitle>친구</CategoryTitle>
+        <LoadingContainer>
+          <LoadingText>친구 목록을 불러오는 중...</LoadingText>
+        </LoadingContainer>
+      </FriendsWrapper>
+    );
+  }
+
+  if (friends.length === 0) {
+    return (
+      <FriendsWrapper>
+        <CategoryTitle>친구</CategoryTitle>
+        <EmptyContainer>
+          <EmptyText>아직 친구가 없습니다</EmptyText>
+          <EmptySubtext>새로운 사람들과 만나보세요!</EmptySubtext>
+        </EmptyContainer>
+      </FriendsWrapper>
+    );
+  }
 
   return (
     <FriendsWrapper>
       <CategoryTitle>친구</CategoryTitle>
       <FriendsList>
-        {friendsData.map((friend) => (
+        {friends.map((friend) => (
           <FriendItem key={friend.id} onClick={() => navigate(`/profiles/${friend.id}`)}>
             <ProfileSection>
-              <ProfileImage src={friend.profileImage} alt={friend.nickname} />
-              {friend.isOnline && <OnlineIndicator />}
+              <ProfileImage 
+                src={friend.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.nickname}`} 
+                alt={friend.nickname} 
+              />
+              <OnlineIndicator />
             </ProfileSection>
             
             <FriendInfo>
               <FriendHeader>
                 <Nickname>{friend.nickname}</Nickname>
-                <Age>{friend.age}세</Age>
+                <JoinDate>{new Date(friend.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} 가입</JoinDate>
               </FriendHeader>
               
-              <Details>
-                <DetailItem>
-                  <DetailLabel>성별</DetailLabel>
-                  <DetailValue>{friend.gender}</DetailValue>
-                </DetailItem>
-                
-                <DetailItem>
-                  <DetailLabel>국가</DetailLabel>
-                  <DetailValue>{friend.country}</DetailValue>
-                </DetailItem>
-              </Details>
+              {friend.bio && (
+                <Bio>{friend.bio}</Bio>
+              )}
               
               <Interests>
                 <InterestLabel>관심사</InterestLabel>
                 <InterestTags>
-                  {friend.interests.map((interest, index) => (
-                    <InterestTag key={index}>{interest}</InterestTag>
-                  ))}
+                  {friend.interests && friend.interests.length > 0 ? (
+                    friend.interests.slice(0, 3).map((interest, index) => (
+                      <InterestTag key={index}>{interest}</InterestTag>
+                    ))
+                  ) : (
+                    <InterestTag>관심사 없음</InterestTag>
+                  )}
+                  {friend.interests && friend.interests.length > 3 && (
+                    <InterestTag>+{friend.interests.length - 3}</InterestTag>
+                  )}
                 </InterestTags>
               </Interests>
             </FriendInfo>
@@ -130,37 +190,21 @@ const Nickname = styled.h3`
   margin: 0;
 `;
 
-const Age = styled.span`
-  font-size: 14px;
-  color: var(--primary-blue);
-  background-color: var(--primary-light-blue);
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-weight: 500;
-`;
-
-const Details = styled.div`
-  display: flex;
-  gap: 16px;
-  margin-bottom: 12px;
-`;
-
-const DetailItem = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-`;
-
-const DetailLabel = styled.span`
+const JoinDate = styled.span`
   font-size: 12px;
   color: var(--text-light);
   font-weight: 500;
 `;
 
-const DetailValue = styled.span`
+const Bio = styled.p`
   font-size: 14px;
   color: var(--text-secondary);
-  font-weight: 500;
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 `;
 
 const Interests = styled.div`
@@ -195,6 +239,41 @@ const InterestTag = styled.span`
     background-color: var(--primary-light-blue);
     border-color: var(--primary-blue);
   }
+`;
+
+const LoadingContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+`;
+
+const LoadingText = styled.p`
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin: 0;
+`;
+
+const EmptyContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  text-align: center;
+`;
+
+const EmptyText = styled.h3`
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+`;
+
+const EmptySubtext = styled.p`
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
 `;
 
 export default Friends;

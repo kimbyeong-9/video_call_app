@@ -34,7 +34,7 @@ const AppRoutes = () => {
   const routes = useRoutes([
     // Public Routes
     {
-      path: 'login',
+      path: '/',
       element: <Login />
     },
     {
@@ -82,7 +82,7 @@ const AppRoutes = () => {
       ),
       children: [
         {
-          path: '/',
+          path: '/home',
           element: <Home />
         },
         {

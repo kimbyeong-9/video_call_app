@@ -41,7 +41,7 @@ const Login = () => {
 
         if (session?.user) {
           console.log('🔵 Login - 이미 로그인된 사용자, 홈으로 이동');
-          navigate('/', { replace: true });
+          navigate('/home', { replace: true });
         }
       } catch (error) {
         if (timeoutId) clearTimeout(timeoutId);
@@ -172,7 +172,7 @@ const Login = () => {
       // 1초 후 홈으로 이동
       setTimeout(() => {
         console.log('🔵 Login - 홈으로 이동');
-        navigate('/', { replace: true });
+        navigate('/home', { replace: true });
       }, 1000);
     } catch (error) {
       console.error('🔵 Login - 전체 오류:', error);

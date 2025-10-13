@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiSearch } from 'react-icons/fi';
 import { IoIosArrowDown, IoIosArrowUp } from 'react-icons/io';
 import { supabase } from '../../utils/supabase';
+import { onlineStatusManager } from '../../utils/onlineStatus';
 
 const Search = () => {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ const Search = () => {
   const [recommendedUsers, setRecommendedUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [onlineUsers, setOnlineUsers] = useState(new Map()); // 온라인 사용자 상태
 
   useEffect(() => {
     getCurrentUser();
@@ -22,6 +24,37 @@ const Search = () => {
     if (currentUserId) {
       loadRecommendedUsers();
     }
+  }, [currentUserId]);
+
+  // 온라인 상태 관리
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    let unsubscribeStatusChange;
+
+    const initializeOnlineStatus = async () => {
+      try {
+        // 온라인 상태 매니저 초기화
+        await onlineStatusManager.initialize(currentUserId);
+        
+        // 온라인 상태 변경 구독
+        unsubscribeStatusChange = onlineStatusManager.onStatusChange((statusEntries) => {
+          const newOnlineUsers = new Map(statusEntries);
+          setOnlineUsers(newOnlineUsers);
+        });
+      } catch (error) {
+        console.error('❌ Search - 온라인 상태 초기화 오류:', error);
+      }
+    };
+
+    initializeOnlineStatus();
+
+    return () => {
+      if (unsubscribeStatusChange) {
+        unsubscribeStatusChange();
+      }
+      // cleanup은 호출하지 않음 (싱글톤이므로 다른 페이지에서도 사용 중)
+    };
   }, [currentUserId]);
 
   const getCurrentUser = async () => {
@@ -56,6 +89,14 @@ const Search = () => {
       console.error('Search - 추천 사용자 로드 오류:', error);
       setRecommendedUsers([]);
     }
+  };
+
+  // 사용자의 온라인 상태 확인
+  const getUserOnlineStatus = (userId) => {
+    if (userId === currentUserId) {
+      return { is_online: true }; // 현재 사용자는 항상 온라인으로 표시
+    }
+    return onlineUsers.get(userId) || { is_online: false };
   };
 
   const handleSearch = async (e) => {
@@ -121,7 +162,7 @@ const Search = () => {
                     src={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`} 
                     alt={user.nickname} 
                   />
-                  <OnlineIndicator />
+                  <OnlineIndicator $isOnline={getUserOnlineStatus(user.id).is_online} />
                 </ProfileSection>
                 
                 <UserInfo>
@@ -167,7 +208,7 @@ const Search = () => {
                     src={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`} 
                     alt={user.nickname} 
                   />
-                  <OnlineIndicator />
+                  <OnlineIndicator $isOnline={getUserOnlineStatus(user.id).is_online} />
                 </ProfileSection>
                 
                 <UserInfo>
@@ -335,9 +376,20 @@ const OnlineIndicator = styled.div`
   right: 4px;
   width: 14px;
   height: 14px;
-  background-color: #4CAF50;
+  background-color: ${props => props.$isOnline ? '#4CAF50' : '#9E9E9E'};
   border: 3px solid #ffffff;
   border-radius: 50%;
+  box-shadow: 0 2px 4px ${props => props.$isOnline ? 'rgba(76, 175, 80, 0.3)' : 'rgba(158, 158, 158, 0.3)'};
+  animation: ${props => props.$isOnline ? 'pulse-online' : 'none'} 2s ease-in-out infinite;
+
+  @keyframes pulse-online {
+    0%, 100% {
+      box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+    }
+    50% {
+      box-shadow: 0 2px 8px rgba(76, 175, 80, 0.6);
+    }
+  }
 `;
 
 const UserInfo = styled.div`

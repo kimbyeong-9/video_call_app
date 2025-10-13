@@ -636,31 +636,40 @@ export class WebRTCManager {
    * 통화 종료 및 리소스 정리
    */
   async cleanup() {
+    console.log('🔵 [WebRTCManager] cleanup 시작');
+    
     // 로컬 스트림 중지
     if (this.localStream) {
+      console.log('🔵 [WebRTCManager] 로컬 스트림 중지');
       this.localStream.getTracks().forEach(track => track.stop());
+      this.localStream = null;
     }
 
     // PeerConnection 종료
     if (this.peerConnection) {
+      console.log('🔵 [WebRTCManager] PeerConnection 종료');
       this.peerConnection.close();
+      this.peerConnection = null;
     }
 
-    // 시그널링 구독 해제
+    // 시그널링 구독 해제 (폴링 방식)
     if (this.signalChannel) {
+      console.log('🔵 [WebRTCManager] 시그널링 폴링 중지');
       if (typeof this.signalChannel.unsubscribe === 'function') {
         this.signalChannel.unsubscribe();
-      } else {
-        await supabase.removeChannel(this.signalChannel);
       }
+      this.signalChannel = null;
     }
+    
+    // 상태 구독 해제
     if (this.statusChannel) {
+      console.log('🔵 [WebRTCManager] 상태 구독 해제');
       await supabase.removeChannel(this.statusChannel);
+      this.statusChannel = null;
     }
 
-    this.localStream = null;
     this.remoteStream = null;
-    this.peerConnection = null;
+    console.log('✅ [WebRTCManager] cleanup 완료');
   }
 
   /**
@@ -672,6 +681,39 @@ export class WebRTCManager {
         track.enabled = enabled;
       });
     }
+  }
+
+  /**
+   * 강제 정리 (모든 리소스 즉시 정리)
+   */
+  forceCleanup() {
+    console.log('🔵 [WebRTCManager] 강제 정리 시작');
+    
+    // 즉시 모든 리소스 정리
+    if (this.localStream) {
+      this.localStream.getTracks().forEach(track => track.stop());
+      this.localStream = null;
+    }
+
+    if (this.peerConnection) {
+      this.peerConnection.close();
+      this.peerConnection = null;
+    }
+
+    if (this.signalChannel) {
+      if (typeof this.signalChannel.unsubscribe === 'function') {
+        this.signalChannel.unsubscribe();
+      }
+      this.signalChannel = null;
+    }
+
+    if (this.statusChannel) {
+      supabase.removeChannel(this.statusChannel);
+      this.statusChannel = null;
+    }
+
+    this.remoteStream = null;
+    console.log('✅ [WebRTCManager] 강제 정리 완료');
   }
 
   /**

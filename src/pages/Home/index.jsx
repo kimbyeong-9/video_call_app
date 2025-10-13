@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { FiVideo, FiHeart, FiMessageCircle, FiSettings, FiStar, FiChevronLeft, FiChevronRight, FiShuffle, FiZap } from 'react-icons/fi';
+import { FiVideo, FiMessageCircle, FiSettings, FiStar, FiChevronLeft, FiChevronRight, FiShuffle, FiZap, FiUserPlus, FiUserCheck } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
 import NotificationPopup from '../../components/common/NotificationPopup';
+import { onlineStatusManager } from '../../utils/onlineStatus';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -16,6 +17,8 @@ const Home = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const sliderRef = useRef(null);
+  const [friendsList, setFriendsList] = useState([]); // 친구 목록
+  const [onlineUsers, setOnlineUsers] = useState(new Map()); // 온라인 사용자 상태
   const [notification, setNotification] = useState({
     show: false,
     message: '',
@@ -24,6 +27,7 @@ const Home = () => {
 
   useEffect(() => {
     loadUserData();
+    loadFriendsList();
 
     // 소셜 로그인 성공 확인 (더 정확한 검증)
     const socialLoginSuccess = sessionStorage.getItem('socialLoginSuccess');
@@ -61,6 +65,37 @@ const Home = () => {
       sessionStorage.removeItem('loginMethod');
     }
   }, []);
+
+  // 온라인 상태 관리
+  useEffect(() => {
+    if (!userProfile?.id) return;
+
+    let unsubscribeStatusChange;
+
+    const initializeOnlineStatus = async () => {
+      try {
+        // 온라인 상태 매니저 초기화
+        await onlineStatusManager.initialize(userProfile.id);
+        
+        // 온라인 상태 변경 구독
+        unsubscribeStatusChange = onlineStatusManager.onStatusChange((statusEntries) => {
+          const newOnlineUsers = new Map(statusEntries);
+          setOnlineUsers(newOnlineUsers);
+        });
+      } catch (error) {
+        console.error('❌ 온라인 상태 초기화 오류:', error);
+      }
+    };
+
+    initializeOnlineStatus();
+
+    return () => {
+      if (unsubscribeStatusChange) {
+        unsubscribeStatusChange();
+      }
+      // cleanup은 호출하지 않음 (싱글톤이므로 다른 페이지에서도 사용 중)
+    };
+  }, [userProfile?.id]);
 
   const loadUserData = async () => {
     try {
@@ -128,6 +163,140 @@ const Home = () => {
     setCurrentIndex((prev) => 
       prev === recommendedUsers.length - 1 ? 0 : prev + 1
     );
+  };
+
+  // 프로필 카드 클릭 시 유저 프로필 페이지로 이동
+  const handleCardClick = (userId) => {
+    // 드래그 중이면 클릭 이벤트 무시
+    if (isDragging || Math.abs(dragOffset) > 10) {
+      return;
+    }
+    navigate(`/profiles/${userId}`);
+  };
+
+  // 메시지 버튼 클릭 시 채팅방으로 이동
+  const handleMessageClick = (e, user) => {
+    e.stopPropagation(); // 카드 클릭 이벤트 전파 방지
+    
+    if (!userProfile?.id) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    if (userProfile.id === user.id) {
+      alert('자신에게는 메시지를 보낼 수 없습니다.');
+      return;
+    }
+
+    // 채팅방 ID 생성 (두 사용자 ID를 정렬하여 조합)
+    const sortedIds = [userProfile.id, user.id].sort();
+    const chatRoomId = `chat_${sortedIds[0]}_${sortedIds[1]}`;
+    
+    navigate(`/chatting/${chatRoomId}`);
+  };
+
+  // 친구 목록 로드
+  const loadFriendsList = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      // friends 테이블에서 현재 사용자의 친구 목록 가져오기
+      const { data: friends, error } = await supabase
+        .from('friends')
+        .select('friend_id')
+        .eq('user_id', session.user.id);
+
+      if (error) {
+        console.error('친구 목록 로드 오류:', error);
+        return;
+      }
+
+      // friend_id 배열로 변환
+      const friendIds = friends?.map(f => f.friend_id) || [];
+      setFriendsList(friendIds);
+    } catch (error) {
+      console.error('친구 목록 로드 중 오류:', error);
+    }
+  };
+
+  // 친구 추가/제거 버튼 클릭
+  const handleFriendToggle = async (e, user) => {
+    e.stopPropagation(); // 카드 클릭 이벤트 전파 방지
+    
+    if (!userProfile?.id) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    if (userProfile.id === user.id) {
+      alert('자기 자신은 친구로 추가할 수 없습니다.');
+      return;
+    }
+
+    const isFriend = friendsList.includes(user.id);
+
+    try {
+      if (isFriend) {
+        // 친구 제거
+        const { error } = await supabase
+          .from('friends')
+          .delete()
+          .eq('user_id', userProfile.id)
+          .eq('friend_id', user.id);
+
+        if (error) throw error;
+
+        setFriendsList(prev => prev.filter(id => id !== user.id));
+        setNotification({
+          show: true,
+          message: `${user.nickname}님을 친구 목록에서 제거했습니다.`,
+          type: 'success'
+        });
+      } else {
+        // 친구 추가
+        const { error } = await supabase
+          .from('friends')
+          .insert({
+            user_id: userProfile.id,
+            friend_id: user.id
+          });
+
+        if (error) throw error;
+
+        setFriendsList(prev => [...prev, user.id]);
+        setNotification({
+          show: true,
+          message: `${user.nickname}님을 친구로 추가했습니다!`,
+          type: 'success'
+        });
+      }
+
+      // 3초 후 알림 자동 닫기
+      setTimeout(() => {
+        setNotification(prev => ({ ...prev, show: false }));
+      }, 3000);
+
+    } catch (error) {
+      console.error('친구 추가/제거 오류:', error);
+      setNotification({
+        show: true,
+        message: '작업에 실패했습니다. 다시 시도해주세요.',
+        type: 'error'
+      });
+
+      setTimeout(() => {
+        setNotification(prev => ({ ...prev, show: false }));
+      }, 3000);
+    }
+  };
+
+  // 사용자의 온라인 상태 확인
+  const getUserOnlineStatus = (userId) => {
+    if (userId === userProfile?.id) {
+      return { is_online: true }; // 현재 사용자는 항상 온라인으로 표시
+    }
+    return onlineUsers.get(userId) || { is_online: false };
   };
 
   const handleTouchStart = (e) => {
@@ -235,7 +404,7 @@ const Home = () => {
                 src={userProfile?.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile?.nickname || userProfile?.email || 'user'}`}
                 alt="내 프로필"
               />
-              <OnlineStatus />
+              <OnlineStatus $isOnline={getUserOnlineStatus(userProfile?.id).is_online} />
             </ProfileImageContainer>
             <ProfileInfo>
               <ProfileName>{userProfile?.nickname || '사용자'}</ProfileName>
@@ -253,7 +422,7 @@ const Home = () => {
                 </ProfileInterests>
               </ProfileInterestsSection>
             </ProfileInfo>
-            <EditButton onClick={() => navigate('/profiles/edit')}>
+            <EditButton onClick={() => navigate('/profiles/me')}>
               <FiSettings size={16} />
             </EditButton>
           </ProfileCard>
@@ -266,13 +435,13 @@ const Home = () => {
               <ShuffleIcon>
                 <FiShuffle size={28} />
               </ShuffleIcon>
-              <ZapIcon delay="0s">
+              <ZapIcon $delay="0s">
                 <FiZap size={16} />
               </ZapIcon>
-              <ZapIcon delay="0.3s">
+              <ZapIcon $delay="0.3s">
                 <FiZap size={14} />
               </ZapIcon>
-              <ZapIcon delay="0.6s">
+              <ZapIcon $delay="0.6s">
                 <FiZap size={12} />
               </ZapIcon>
             </RandomIconWrapper>
@@ -320,10 +489,11 @@ const Home = () => {
                   <LargeUserCard
                     key={user.id}
                     $backgroundImage={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`}
+                    onClick={() => handleCardClick(user.id)}
                   >
                     <CardOverlay />
                     <CardContent>
-                      <OnlineIndicatorLarge />
+                      <OnlineIndicatorLarge $isOnline={getUserOnlineStatus(user.id).is_online} />
                       <UserInfoLarge>
                         <UserNameLarge>{user.nickname}</UserNameLarge>
                         <UserBioLarge>{user.bio || '소개가 없습니다.'}</UserBioLarge>
@@ -338,10 +508,21 @@ const Home = () => {
                         </UserInterestsLarge>
                       </UserInfoLarge>
                       <UserActionsLarge>
-                        <ActionButtonLarge type="like">
-                          <FiHeart size={20} />
+                        <ActionButtonLarge 
+                          type="friend" 
+                          $isFriend={friendsList.includes(user.id)}
+                          onClick={(e) => handleFriendToggle(e, user)}
+                        >
+                          {friendsList.includes(user.id) ? (
+                            <FiUserCheck size={20} />
+                          ) : (
+                            <FiUserPlus size={20} />
+                          )}
                         </ActionButtonLarge>
-                        <ActionButtonLarge type="chat">
+                        <ActionButtonLarge 
+                          type="chat" 
+                          onClick={(e) => handleMessageClick(e, user)}
+                        >
                           <FiMessageCircle size={20} />
                         </ActionButtonLarge>
                       </UserActionsLarge>
@@ -451,9 +632,20 @@ const OnlineStatus = styled.div`
   right: 4px;
   width: 20px;
   height: 20px;
-  background-color: #4CAF50;
+  background-color: ${props => props.$isOnline ? '#4CAF50' : '#9E9E9E'};
   border: 3px solid white;
   border-radius: 50%;
+  box-shadow: 0 2px 8px ${props => props.$isOnline ? 'rgba(76, 175, 80, 0.6)' : 'rgba(158, 158, 158, 0.6)'};
+  animation: ${props => props.$isOnline ? 'pulse-online' : 'none'} 2s ease-in-out infinite;
+
+  @keyframes pulse-online {
+    0%, 100% {
+      box-shadow: 0 2px 8px rgba(76, 175, 80, 0.6);
+    }
+    50% {
+      box-shadow: 0 2px 16px rgba(76, 175, 80, 0.9);
+    }
+  }
 `;
 
 const ProfileInfo = styled.div`
@@ -583,6 +775,13 @@ const LargeUserCard = styled.div`
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: scale(1.02);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  }
 
   &::before {
     content: '';
@@ -637,11 +836,11 @@ const OnlineIndicatorLarge = styled.div`
   right: 20px;
   width: 16px;
   height: 16px;
-  background-color: #4CAF50;
+  background-color: ${props => props.$isOnline ? '#4CAF50' : '#9E9E9E'};
   border: 3px solid white;
   border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.6);
-  animation: pulse-online 2s ease-in-out infinite;
+  box-shadow: 0 2px 8px ${props => props.$isOnline ? 'rgba(76, 175, 80, 0.6)' : 'rgba(158, 158, 158, 0.6)'};
+  animation: ${props => props.$isOnline ? 'pulse-online' : 'none'} 2s ease-in-out infinite;
 
   @keyframes pulse-online {
     0%, 100% {
@@ -706,10 +905,14 @@ const UserActionsLarge = styled.div`
 `;
 
 const ActionButtonLarge = styled.button`
-  background: ${props => props.type === 'like' 
-    ? 'linear-gradient(135deg, #FF6B9D 0%, #FF8FB3 100%)' 
-    : 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)'
-  };
+  background: ${props => {
+    if (props.type === 'friend') {
+      return props.$isFriend 
+        ? 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)' // 친구 추가됨 (초록색)
+        : 'linear-gradient(135deg, #FF9800 0%, #FFB74D 100%)'; // 친구 추가 (주황색)
+    }
+    return 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)'; // 채팅 (보라색)
+  }};
   border: none;
   border-radius: 50%;
   width: 64px;

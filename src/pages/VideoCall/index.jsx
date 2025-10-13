@@ -33,7 +33,10 @@ const VideoCall = () => {
     initCall();
 
     return () => {
-      cleanup();
+      // cleanup을 async로 호출하되, useEffect return에서는 await 불가
+      cleanup().catch(error => {
+        console.error('❌ [VideoCall] cleanup 에러:', error);
+      });
     };
   }, [callId]);
 
@@ -150,8 +153,16 @@ const VideoCall = () => {
   };
 
   const handleEndCall = async () => {
-    await videoCall.updateCallStatus(callId, 'ended');
+    console.log('🔵 [VideoCall] 통화 종료 시작');
+    try {
+      await videoCall.updateCallStatus(callId, 'ended');
+      console.log('✅ [VideoCall] 통화 상태 업데이트 완료');
+    } catch (error) {
+      console.error('❌ [VideoCall] 통화 상태 업데이트 실패:', error);
+    }
+    
     await cleanup();
+    console.log('✅ [VideoCall] cleanup 완료, Live 페이지로 이동');
     navigate('/live');
   };
 

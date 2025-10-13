@@ -3,12 +3,14 @@ import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../utils/supabase';
 import { useUnreadMessages } from '../../contexts/UnreadMessagesContext';
+import { onlineStatusManager } from '../../utils/onlineStatus';
 
 const Chatlist = () => {
   const navigate = useNavigate();
   const [chatRooms, setChatRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
+  const [onlineUsers, setOnlineUsers] = useState(new Map()); // 온라인 사용자 상태
   const { unreadByRoom, markRoomAsRead } = useUnreadMessages();
 
   const loadChatRooms = useCallback(async () => {
@@ -133,6 +135,14 @@ const Chatlist = () => {
     }
   }, []);
 
+  // 사용자의 온라인 상태 확인
+  const getUserOnlineStatus = (userId) => {
+    if (userId === currentUser?.id) {
+      return { is_online: true }; // 현재 사용자는 항상 온라인으로 표시
+    }
+    return onlineUsers.get(userId) || { is_online: false };
+  };
+
   // 컴포넌트 마운트 시 데이터 로드
   useEffect(() => {
     console.log('🔵 Chatlist useEffect 실행');
@@ -173,6 +183,37 @@ const Chatlist = () => {
       clearInterval(intervalId);
     };
   }, [currentUser, loadChatRooms]);
+
+  // 온라인 상태 관리
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    let unsubscribeStatusChange;
+
+    const initializeOnlineStatus = async () => {
+      try {
+        // 온라인 상태 매니저 초기화
+        await onlineStatusManager.initialize(currentUser.id);
+        
+        // 온라인 상태 변경 구독
+        unsubscribeStatusChange = onlineStatusManager.onStatusChange((statusEntries) => {
+          const newOnlineUsers = new Map(statusEntries);
+          setOnlineUsers(newOnlineUsers);
+        });
+      } catch (error) {
+        console.error('❌ Chatlist - 온라인 상태 초기화 오류:', error);
+      }
+    };
+
+    initializeOnlineStatus();
+
+    return () => {
+      if (unsubscribeStatusChange) {
+        unsubscribeStatusChange();
+      }
+      // cleanup은 호출하지 않음 (싱글톤이므로 다른 페이지에서도 사용 중)
+    };
+  }, [currentUser?.id]);
 
   // 실시간 메시지 구독
   useEffect(() => {
@@ -268,7 +309,10 @@ const Chatlist = () => {
                 key={chat.id}
                 onClick={() => handleChatItemClick(chat.id)}
               >
-                <ProfileImage src={chat.profileImage} alt={chat.nickname} />
+                <ProfileSection>
+                  <ProfileImage src={chat.profileImage} alt={chat.nickname} />
+                  <OnlineIndicator $isOnline={getUserOnlineStatus(chat.userId).is_online} />
+                </ProfileSection>
                 <ChatInfo>
                   <ChatHeader>
                     <Nickname>{chat.nickname}</Nickname>
@@ -333,12 +377,38 @@ const ChatItem = styled.div`
   }
 `;
 
+const ProfileSection = styled.div`
+  position: relative;
+  margin-right: 12px;
+`;
+
 const ProfileImage = styled.img`
   width: 50px;
   height: 50px;
   border-radius: 25px;
-  margin-right: 12px;
   object-fit: cover;
+`;
+
+const OnlineIndicator = styled.div`
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  background-color: ${props => props.$isOnline ? '#4CAF50' : '#9E9E9E'};
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px ${props => props.$isOnline ? 'rgba(76, 175, 80, 0.3)' : 'rgba(158, 158, 158, 0.3)'};
+  animation: ${props => props.$isOnline ? 'pulse-online' : 'none'} 2s ease-in-out infinite;
+
+  @keyframes pulse-online {
+    0%, 100% {
+      box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+    }
+    50% {
+      box-shadow: 0 2px 8px rgba(76, 175, 80, 0.6);
+    }
+  }
 `;
 
 const ChatInfo = styled.div`

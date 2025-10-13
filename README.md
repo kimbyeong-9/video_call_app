@@ -10,6 +10,15 @@ WebRTC와 Supabase를 활용한 실시간 영상통화 앱입니다.
 - **Styling**: Styled Components
 - **Icons**: React Icons
 
+## 📚 Documentation
+
+모든 상세 문서는 [`docs/`](./docs/) 폴더에 있습니다:
+- [📖 전체 문서 목록](./docs/README.md)
+- [🔐 인증 시스템](./docs/AUTH_SYSTEM_REPORT.md)
+- [🤝 친구 기능](./docs/FRIENDS_TABLE_SETUP.md)
+- [🎥 영상통화](./docs/VIDEO_CALL_SETUP.md)
+- [🗄️ 데이터베이스](./docs/SUPABASE_RLS_FIX.md)
+
 ## 📋 주요 기능
 
 ### 1. 사용자 인증

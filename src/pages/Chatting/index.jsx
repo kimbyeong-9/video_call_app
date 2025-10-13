@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
+import { FiArrowLeft } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
 import { useUnreadMessages } from '../../contexts/UnreadMessagesContext';
 
@@ -355,7 +356,9 @@ const Chatting = () => {
   return (
     <ChattingContainer>
       <ChatHeader>
-        <BackButton onClick={() => navigate(-1)}>←</BackButton>
+        <BackButton onClick={() => navigate(-1)}>
+          <FiArrowLeft size={22} />
+        </BackButton>
         <RoomTitle>{otherUser?.nickname || `채팅방 ${roomId}`}</RoomTitle>
         <HeaderSpacer />
       </ChatHeader>
@@ -433,29 +436,48 @@ const ChattingContainer = styled.div`
 
 const ChatHeader = styled.div`
   width: 100%;
-  height: 60px;
+  height: 64px;
   padding: 0 16px;
-  background-color: #ffffff;
-  border-bottom: 1px solid #f0f0f0;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
   position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 `;
 
 const BackButton = styled.button`
   border: none;
-  background: none;
-  font-size: 24px;
+  background-color: transparent;
+  color: var(--primary-blue);
   cursor: pointer;
   padding: 8px;
+  margin-right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: var(--accent-blue);
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+    background-color: #d0e7ff;
+  }
 `;
 
 const RoomTitle = styled.h1`
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 600;
   margin: 0;
+  color: var(--text-primary);
   flex: 1;
   text-align: center;
+  letter-spacing: -0.02em;
 `;
 
 const HeaderSpacer = styled.div`

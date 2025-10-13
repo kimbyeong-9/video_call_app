@@ -3,7 +3,8 @@ import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiVideo } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
-import { videoCall } from '../../utils/webrtc';
+import { videoCall, WebRTCManager } from '../../utils/webrtc';
+import { onlineStatusManager } from '../../utils/onlineStatus';
 
 const Live = () => {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ const Live = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
+  const [onlineUsers, setOnlineUsers] = useState(new Map()); // 온라인 사용자 상태
 
   // 사용자 목록 로드
   useEffect(() => {
@@ -34,10 +36,18 @@ const Live = () => {
           console.log('🔵 Live - 현재 사용자:', user.id);
         }
 
-        // Supabase에서 모든 사용자 가져오기 (자기 자신 제외)
+        // Supabase에서 온라인 사용자만 가져오기 (자기 자신 제외)
         const { data: usersData, error } = await supabase
           .from('users')
-          .select('id, nickname, email, bio, interests, profile_image')
+          .select(`
+            id, 
+            nickname, 
+            email, 
+            bio, 
+            interests, 
+            profile_image,
+            online_status:user_online_status!user_id(is_online, last_seen)
+          `)
           .neq('id', user.id) // 자기 자신 제외
           .order('created_at', { ascending: false });
 
@@ -47,16 +57,24 @@ const Live = () => {
           return;
         }
 
-        console.log('🔵 Live - 사용자 목록:', usersData);
+        console.log('🔵 Live - 전체 사용자 목록:', usersData);
+
+        // 온라인 사용자만 필터링
+        const onlineUsersData = usersData.filter(u => {
+          const onlineStatus = Array.isArray(u.online_status) ? u.online_status[0] : u.online_status;
+          return onlineStatus && onlineStatus.is_online === true;
+        });
+
+        console.log('🔵 Live - 온라인 사용자 목록:', onlineUsersData);
 
         // 프로필 이미지가 없는 경우 기본 이미지 설정
-        const usersWithImages = usersData.map(u => ({
+        const usersWithImages = onlineUsersData.map(u => ({
           ...u,
           profileImage: u.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.nickname}`,
           interests: u.interests || [],
           bio: u.bio || '안녕하세요!',
-          status: '통화 가능',
-          statusType: 'available'
+          status: '온라인',
+          statusType: 'online'
         }));
 
         if (isMounted) setUsers(usersWithImages);
@@ -78,20 +96,20 @@ const Live = () => {
 
     loadUsers();
 
-    // 실시간 사용자 업데이트 구독
-    console.log('🔵 Live - 실시간 구독 설정');
+    // 실시간 온라인 상태 업데이트 구독
+    console.log('🔵 Live - 실시간 온라인 상태 구독 설정');
 
     const channel = supabase
-      .channel('realtime:live-users')
+      .channel('realtime:live-online-status')
       .on(
         'postgres_changes',
         {
           event: '*', // INSERT, UPDATE, DELETE 모두 감지
           schema: 'public',
-          table: 'users'
+          table: 'user_online_status'
         },
         (payload) => {
-          console.log('🔵 Live - 사용자 변경 감지:', payload);
+          console.log('🔵 Live - 온라인 상태 변경 감지:', payload);
           debouncedLoadUsers();
         }
       )
@@ -106,6 +124,37 @@ const Live = () => {
       supabase.removeChannel(channel);
     };
   }, [navigate]);
+
+  // 온라인 상태 관리
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    let unsubscribeStatusChange;
+
+    const initializeOnlineStatus = async () => {
+      try {
+        // 온라인 상태 매니저 초기화
+        await onlineStatusManager.initialize(currentUser.id);
+        
+        // 온라인 상태 변경 구독
+        unsubscribeStatusChange = onlineStatusManager.onStatusChange((statusEntries) => {
+          const newOnlineUsers = new Map(statusEntries);
+          setOnlineUsers(newOnlineUsers);
+        });
+      } catch (error) {
+        console.error('❌ Live - 온라인 상태 초기화 오류:', error);
+      }
+    };
+
+    initializeOnlineStatus();
+
+    return () => {
+      if (unsubscribeStatusChange) {
+        unsubscribeStatusChange();
+      }
+      // cleanup은 호출하지 않음 (싱글톤이므로 다른 페이지에서도 사용 중)
+    };
+  }, [currentUser?.id]);
 
   const handleMessageChange = (userId, value) => {
     setMessages(prev => ({ ...prev, [userId]: value }));
@@ -156,6 +205,10 @@ const Live = () => {
         navigate('/login');
         return;
       }
+
+      // 이전 WebRTC 인스턴스가 있다면 정리
+      const existingManager = new WebRTCManager(currentUser.id);
+      existingManager.forceCleanup();
 
       console.log('🔵 Live - 통화 시작 요청');
       console.log('🔵 Live - 발신자 ID:', currentUser.id);
@@ -221,7 +274,10 @@ const Live = () => {
         <UserList>
           {users.map((user) => (
             <UserCard key={user.id}>
-              <ProfileImage src={user.profileImage} alt={user.nickname} />
+              <ProfileSection>
+                <ProfileImage src={user.profileImage} alt={user.nickname} />
+                <OnlineIndicator />
+              </ProfileSection>
               <UserInfo>
                 <UserHeader>
                   <Nickname>{user.nickname}</Nickname>
@@ -320,13 +376,39 @@ const UserCard = styled.div`
   }
 `;
 
+const ProfileSection = styled.div`
+  position: relative;
+  margin-bottom: 16px;
+`;
+
 const ProfileImage = styled.img`
   width: 100%;
   height: 300px;
   object-fit: cover;
   border-radius: 16px;
-  margin-bottom: 16px;
   box-shadow: 0 4px 12px rgba(43, 87, 154, 0.1);
+`;
+
+const OnlineIndicator = styled.div`
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 24px;
+  height: 24px;
+  background-color: #4CAF50;
+  border: 4px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.5);
+  animation: pulse-online 2s ease-in-out infinite;
+
+  @keyframes pulse-online {
+    0%, 100% {
+      box-shadow: 0 2px 8px rgba(76, 175, 80, 0.5);
+    }
+    50% {
+      box-shadow: 0 2px 16px rgba(76, 175, 80, 0.8);
+    }
+  }
 `;
 
 const UserInfo = styled.div`

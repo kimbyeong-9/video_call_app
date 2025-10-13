@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { WebRTCManager, videoCall } from '../../utils/webrtc';
-import { FiPhone, FiPhoneOff, FiMic, FiMicOff, FiVideo, FiVideoOff } from 'react-icons/fi';
+import { FiPhoneOff, FiMic, FiMicOff, FiVideo, FiVideoOff } from 'react-icons/fi';
 
 const VideoCall = () => {
   const [searchParams] = useSearchParams();
@@ -62,10 +62,10 @@ const VideoCall = () => {
       console.log('🔵 [VideoCall] Call ID:', callId);
       console.log('🔵 [VideoCall] Mode:', mode);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
+
       const currentUserStr = localStorage.getItem('currentUser');
       console.log('🔵 [VideoCall] localStorage.currentUser:', currentUserStr);
-      
+
       if (!currentUserStr) {
         alert('로그인이 필요합니다.');
         navigate('/login');
@@ -80,24 +80,47 @@ const VideoCall = () => {
       console.log('   - Nickname:', currentUser.nickname);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
+      // 통화 정보 먼저 조회 (발신자/수신자 정보 확인)
+      console.log('🔵 [VideoCall] 통화 정보 조회 시작...');
+      const { data: callData, error: callError } = await videoCall.getCall(callId);
+
+      if (callError) {
+        console.error('❌ [VideoCall] 통화 정보 조회 실패:', callError);
+        alert('통화 정보를 불러올 수 없습니다.');
+        navigate('/live');
+        return;
+      }
+
+      console.log('✅ [VideoCall] 통화 정보:', callData);
+
+      // 발신자/수신자 정보 저장
+      if (mode === 'receiver' && callData?.caller) {
+        setCallerInfo(callData.caller);
+        console.log('✅ [VideoCall] 발신자 정보 설정:', callData.caller.nickname);
+      }
+
       // WebRTC Manager 초기화
       webrtcManagerRef.current = new WebRTCManager(callId, currentUser.id);
-      console.log('✅ [VideoCall] WebRTCManager 생성 완료, currentUserId:', currentUser.id);
+      console.log('✅ [VideoCall] WebRTCManager 생성 완료');
 
       // 로컬 스트림 획득
+      console.log('🔵 [VideoCall] 로컬 스트림 획득 시작...');
       const stream = await webrtcManagerRef.current.getLocalStream();
       setLocalStream(stream);
+      console.log('✅ [VideoCall] 로컬 스트림 획득 완료');
 
       // PeerConnection 초기화
+      console.log('🔵 [VideoCall] PeerConnection 초기화...');
       webrtcManagerRef.current.initPeerConnection(
         (remoteStream) => {
+          console.log('🎉 [VideoCall] 원격 스트림 수신!');
           setRemoteStream(remoteStream);
         },
         (state) => {
+          console.log('🔵 [VideoCall] 연결 상태 변경:', state);
           setConnectionState(state);
           if (state === 'connected') {
             setCallStatus('통화 중');
-            // 통화 상태를 'active'로 업데이트
             videoCall.updateCallStatus(callId, 'active');
           } else if (state === 'disconnected' || state === 'failed') {
             setCallStatus('연결 끊김');
@@ -105,42 +128,46 @@ const VideoCall = () => {
         }
       );
 
-      // 시그널링 시작
+      // 시그널링 구독 시작 (발신자/수신자 모두)
+      console.log('🔵 [VideoCall] 시그널링 구독 시작...');
       webrtcManagerRef.current.startSignaling({
         onOffer: () => {
-          setCallStatus('Offer 수신됨');
+          console.log('📞 [VideoCall] Offer 수신됨 (콜백)');
+          setCallStatus('상대방 응답 대기 중...');
         },
         onAnswer: () => {
+          console.log('✅ [VideoCall] Answer 수신됨 (콜백)');
           setCallStatus('연결 중...');
         }
       });
 
-      // 발신자인 경우 Offer 생성
+      // 모드에 따른 처리
       if (mode === 'caller') {
+        // 발신자: Offer 생성 및 전송
+        console.log('📞 [VideoCall] 발신자 모드 - Offer 생성 시작');
         setCallStatus('상대방을 호출 중...');
         await videoCall.updateCallStatus(callId, 'ringing');
-        await webrtcManagerRef.current.createOffer();
+
+        // 약간의 지연 후 Offer 생성 (PeerConnection이 완전히 초기화되도록)
+        setTimeout(async () => {
+          try {
+            await webrtcManagerRef.current.createOffer();
+            console.log('✅ [VideoCall] Offer 생성 및 전송 완료');
+          } catch (error) {
+            console.error('❌ [VideoCall] Offer 생성 실패:', error);
+          }
+        }, 500);
       } else {
-        // 수신자인 경우 통화 정보 조회
-        console.log('🔵 수신자 모드 - 통화 정보 조회 시작');
-        const { data: callData, error: callError } = await videoCall.getCall(callId);
-        
-        if (callError) {
-          console.error('❌ 통화 정보 조회 실패:', callError);
-          // 에러가 발생해도 통화는 계속 진행
-        } else if (callData?.caller) {
-          console.log('✅ 발신자 정보 조회 성공:', callData.caller);
-          setCallerInfo(callData.caller);
-        } else {
-          console.warn('⚠️ 발신자 정보 없음');
-        }
-        
-        setCallStatus('통화 수락됨');
+        // 수신자: 통화 수락 상태로 변경하고 Offer 대기
+        console.log('📱 [VideoCall] 수신자 모드 - Offer 대기 중');
+        setCallStatus('통화 수락됨 - 연결 중...');
         await videoCall.updateCallStatus(callId, 'active');
       }
 
+      console.log('✅ [VideoCall] 통화 초기화 완료');
+
     } catch (error) {
-      console.error('통화 초기화 실패:', error);
+      console.error('❌ [VideoCall] 통화 초기화 실패:', error);
       alert('카메라/마이크 권한을 허용해주세요.');
       navigate('/live');
     }

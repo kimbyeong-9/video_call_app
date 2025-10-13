@@ -18,6 +18,7 @@ import Auth from '../pages/Auth';
 import Friends from '../pages/Friends';
 import Search from '../pages/Search';
 import Live from '../pages/Live';
+import Recommend from '../pages/Recommend';
 import Mypage from '../pages/Profiles/Mypage';
 import UserProfile from '../pages/Profiles/UserProfile';
 import EditProfile from '../pages/Profiles/EditProfile';
@@ -99,6 +100,10 @@ const AppRoutes = () => {
         {
           path: 'live',
           element: <Live />
+        },
+        {
+          path: 'recommend',
+          element: <Recommend />
         },
         {
           path: 'profiles/me',

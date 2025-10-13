@@ -78,14 +78,14 @@ export const videoCall = {
       if (callError) throw callError;
 
       // 2단계: 발신자 정보 조회
-      const { data: callerData, error: callerError } = await supabase
+      const { data: callerData } = await supabase
         .from('users')
         .select('id, nickname, email, profile_image')
         .eq('id', callData.caller_id)
         .single();
 
       // 3단계: 수신자 정보 조회
-      const { data: receiverData, error: receiverError } = await supabase
+      const { data: receiverData } = await supabase
         .from('users')
         .select('id, nickname, email, profile_image')
         .eq('id', callData.receiver_id)
@@ -111,21 +111,24 @@ export const videoCall = {
    */
   sendOffer: async (callId, senderId, offerSdp) => {
     try {
+      console.log('🔵 [sendOffer] Offer 전송 시작:', { callId, senderId, offerSdp });
+
       const { data, error } = await supabase
         .from('webrtc_signals')
         .insert({
           call_id: callId,
           sender_id: senderId,
           signal_type: 'offer',
-          signal_data: { sdp: offerSdp }
+          signal_data: offerSdp // 이미 { type, sdp } 형태이므로 그대로 저장
         })
         .select()
         .single();
 
       if (error) throw error;
+      console.log('✅ [sendOffer] Offer 전송 완료:', data.id);
       return { data, error: null };
     } catch (error) {
-      console.error('Offer 전송 에러:', error);
+      console.error('❌ [sendOffer] Offer 전송 에러:', error);
       return { data: null, error };
     }
   },
@@ -135,21 +138,24 @@ export const videoCall = {
    */
   sendAnswer: async (callId, senderId, answerSdp) => {
     try {
+      console.log('🔵 [sendAnswer] Answer 전송 시작:', { callId, senderId, answerSdp });
+
       const { data, error } = await supabase
         .from('webrtc_signals')
         .insert({
           call_id: callId,
           sender_id: senderId,
           signal_type: 'answer',
-          signal_data: { sdp: answerSdp }
+          signal_data: answerSdp // 이미 { type, sdp } 형태이므로 그대로 저장
         })
         .select()
         .single();
 
       if (error) throw error;
+      console.log('✅ [sendAnswer] Answer 전송 완료:', data.id);
       return { data, error: null };
     } catch (error) {
-      console.error('Answer 전송 에러:', error);
+      console.error('❌ [sendAnswer] Answer 전송 에러:', error);
       return { data: null, error };
     }
   },
@@ -179,82 +185,105 @@ export const videoCall = {
   },
 
   /**
-   * 시그널링 메시지 폴링 방식으로 수신
+   * 기존 시그널 조회 (수신자가 늦게 진입한 경우)
    */
-  subscribeToSignals: (callId, callbacks) => {
-    console.log('🔵 [subscribeToSignals] 폴링 방식 시작, callId:', callId);
-    
-    let lastCheckedTime = new Date().toISOString();
-    let pollingInterval = null;
-    let isActive = true;
+  getExistingSignals: async (callId, currentUserId) => {
+    try {
+      console.log('🔵 [getExistingSignals] 기존 시그널 조회 시작');
+      console.log('🔵 Call ID:', callId);
 
-    const pollSignals = async () => {
-      if (!isActive) return;
+      const { data: signals, error } = await supabase
+        .from('webrtc_signals')
+        .select('*')
+        .eq('call_id', callId)
+        .neq('sender_id', currentUserId) // 본인이 보낸 것은 제외
+        .order('created_at', { ascending: true });
 
-      try {
-        const { data: signals, error } = await supabase
-          .from('webrtc_signals')
-          .select('*')
-          .eq('call_id', callId)
-          .gt('created_at', lastCheckedTime)
-          .order('created_at', { ascending: true });
+      if (error) throw error;
 
-        if (error) {
-          console.error('❌ [subscribeToSignals] 폴링 에러:', error);
-          return;
+      console.log('✅ [getExistingSignals] 조회된 시그널:', signals?.length || 0, '개');
+      return { data: signals || [], error: null };
+    } catch (error) {
+      console.error('❌ [getExistingSignals] 기존 시그널 조회 에러:', error);
+      return { data: [], error };
+    }
+  },
+
+  /**
+   * 시그널링 메시지 실시간 구독
+   */
+  subscribeToSignals: (callId, currentUserId, callbacks) => {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔵 [subscribeToSignals] Realtime 구독 시작');
+    console.log('🔵 Call ID:', callId);
+    console.log('🔵 Current User ID:', currentUserId);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    const channel = supabase
+      .channel(`webrtc-signals:${callId}`, {
+        config: {
+          broadcast: { self: false },
+          presence: { key: currentUserId }
         }
-
-        if (signals && signals.length > 0) {
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'webrtc_signals',
+          filter: `call_id=eq.${callId}`
+        },
+        (payload) => {
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.log('🎉 [subscribeToSignals] 새 신호 발견!', signals.length, '개');
+          console.log('🎉 [subscribeToSignals] 새 신호 수신!');
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-          signals.forEach(signal => {
-            console.log('📦 신호:', JSON.stringify(signal, null, 2));
-            
-            const { signal_type, signal_data, sender_id } = signal;
+          const signal = payload.new;
+          console.log('📦 신호 타입:', signal.signal_type);
+          console.log('📦 발신자 ID:', signal.sender_id);
+          console.log('📦 현재 사용자 ID:', currentUserId);
 
-            switch (signal_type) {
-              case 'offer':
-                console.log('📞 [subscribeToSignals] Offer 신호 처리, sender_id:', sender_id);
-                callbacks.onOffer?.(signal_data.sdp, sender_id);
-                break;
-              case 'answer':
-                console.log('✅ [subscribeToSignals] Answer 신호 처리, sender_id:', sender_id);
-                callbacks.onAnswer?.(signal_data.sdp, sender_id);
-                break;
-              case 'ice-candidate':
-                console.log('🧊 [subscribeToSignals] ICE Candidate 신호 처리, sender_id:', sender_id);
-                callbacks.onIceCandidate?.(signal_data.candidate, sender_id);
-                break;
-              default:
-                console.warn('⚠️ [subscribeToSignals] 알 수 없는 시그널 타입:', signal_type);
-            }
+          const { signal_type, signal_data, sender_id } = signal;
 
-            lastCheckedTime = signal.created_at;
-          });
+          // 본인이 보낸 신호는 무시
+          if (sender_id === currentUserId) {
+            console.log('⚠️ [subscribeToSignals] 본인의 신호 - 무시');
+            return;
+          }
+
+          switch (signal_type) {
+            case 'offer':
+              console.log('📞 [subscribeToSignals] Offer 신호 처리');
+              console.log('📞 Offer SDP:', signal_data);
+              callbacks.onOffer?.(signal_data, sender_id);
+              break;
+            case 'answer':
+              console.log('✅ [subscribeToSignals] Answer 신호 처리');
+              console.log('✅ Answer SDP:', signal_data);
+              callbacks.onAnswer?.(signal_data, sender_id);
+              break;
+            case 'ice-candidate':
+              console.log('🧊 [subscribeToSignals] ICE Candidate 신호 처리');
+              callbacks.onIceCandidate?.(signal_data.candidate, sender_id);
+              break;
+            default:
+              console.warn('⚠️ [subscribeToSignals] 알 수 없는 시그널 타입:', signal_type);
+          }
         }
-      } catch (error) {
-        console.error('❌ [subscribeToSignals] 폴링 예외:', error);
-      }
-    };
-
-    // 즉시 한 번 실행
-    pollSignals();
-
-    // 1초마다 폴링
-    pollingInterval = setInterval(pollSignals, 1000);
-
-    // 정리 함수를 반환
-    return {
-      unsubscribe: () => {
-        console.log('🔵 [subscribeToSignals] 폴링 중지');
-        isActive = false;
-        if (pollingInterval) {
-          clearInterval(pollingInterval);
+      )
+      .subscribe((status) => {
+        console.log('🔵 [subscribeToSignals] 구독 상태:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ [subscribeToSignals] 시그널링 구독 완료!');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ [subscribeToSignals] 채널 에러');
+        } else if (status === 'TIMED_OUT') {
+          console.error('❌ [subscribeToSignals] 구독 타임아웃');
         }
-      }
-    };
+      });
+
+    return channel;
   },
 
   /**
@@ -459,7 +488,7 @@ export class WebRTCManager {
     };
 
     // 데이터 채널 상태 (디버깅용)
-    this.peerConnection.ondatachannel = (event) => {
+    this.peerConnection.ondatachannel = (_event) => {
       console.log('🔵 [WebRTC] 데이터 채널 수신');
     };
 
@@ -566,24 +595,61 @@ export class WebRTCManager {
   /**
    * 시그널링 구독 시작
    */
-  startSignaling(callbacks) {
+  async startSignaling(callbacks) {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🔵 [WebRTC.startSignaling] 시그널링 구독 시작');
     console.log('🔵 [WebRTC.startSignaling] Call ID:', this.callId);
     console.log('🔵 [WebRTC.startSignaling] Current User ID:', this.currentUserId);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    
-    this.signalChannel = videoCall.subscribeToSignals(this.callId, {
-      onOffer: async (offerSdp, senderId) => {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📞 [WebRTC.onOffer] Offer 수신!');
-        console.log('   Sender ID:', senderId);
-        console.log('   Current User ID:', this.currentUserId);
-        console.log('   같은 사용자?', senderId === this.currentUserId);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        
-        if (senderId !== this.currentUserId) {
-          console.log('✅ [WebRTC.onOffer] 다른 사용자의 Offer - Answer 생성 시작');
+
+    // 기존 시그널 먼저 처리 (수신자가 늦게 진입한 경우)
+    const { data: existingSignals } = await videoCall.getExistingSignals(
+      this.callId,
+      this.currentUserId
+    );
+
+    if (existingSignals && existingSignals.length > 0) {
+      console.log('🔵 [WebRTC.startSignaling] 기존 시그널 처리:', existingSignals.length, '개');
+
+      for (const signal of existingSignals) {
+        const { signal_type, signal_data } = signal;
+
+        try {
+          switch (signal_type) {
+            case 'offer':
+              console.log('📞 [WebRTC.startSignaling] 기존 Offer 처리');
+              await this.createAnswer(signal_data);
+              callbacks.onOffer?.(signal_data);
+              break;
+            case 'answer':
+              console.log('✅ [WebRTC.startSignaling] 기존 Answer 처리');
+              await this.handleAnswer(signal_data);
+              callbacks.onAnswer?.(signal_data);
+              break;
+            case 'ice-candidate':
+              console.log('🧊 [WebRTC.startSignaling] 기존 ICE Candidate 처리');
+              await this.handleIceCandidate(signal_data.candidate);
+              break;
+            default:
+              console.warn('⚠️ [WebRTC.startSignaling] 알 수 없는 시그널 타입:', signal_type);
+          }
+        } catch (error) {
+          console.error('❌ [WebRTC.startSignaling] 기존 시그널 처리 실패:', error);
+        }
+      }
+    }
+
+    // Realtime 구독 시작
+    this.signalChannel = videoCall.subscribeToSignals(
+      this.callId,
+      this.currentUserId,
+      {
+        onOffer: async (offerSdp) => {
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('📞 [WebRTC.onOffer] Offer 수신!');
+          console.log('   Offer SDP:', offerSdp);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
           try {
             await this.createAnswer(offerSdp);
             callbacks.onOffer?.(offerSdp);
@@ -591,20 +657,13 @@ export class WebRTCManager {
           } catch (error) {
             console.error('❌ [WebRTC.onOffer] Answer 생성 실패:', error);
           }
-        } else {
-          console.log('⚠️ [WebRTC.onOffer] 본인의 Offer - 무시');
-        }
-      },
-      onAnswer: async (answerSdp, senderId) => {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('✅ [WebRTC.onAnswer] Answer 수신!');
-        console.log('   Sender ID:', senderId);
-        console.log('   Current User ID:', this.currentUserId);
-        console.log('   같은 사용자?', senderId === this.currentUserId);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        
-        if (senderId !== this.currentUserId) {
-          console.log('✅ [WebRTC.onAnswer] 다른 사용자의 Answer - 처리 시작');
+        },
+        onAnswer: async (answerSdp) => {
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('✅ [WebRTC.onAnswer] Answer 수신!');
+          console.log('   Answer SDP:', answerSdp);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
           try {
             await this.handleAnswer(answerSdp);
             callbacks.onAnswer?.(answerSdp);
@@ -612,23 +671,20 @@ export class WebRTCManager {
           } catch (error) {
             console.error('❌ [WebRTC.onAnswer] Answer 처리 실패:', error);
           }
-        } else {
-          console.log('⚠️ [WebRTC.onAnswer] 본인의 Answer - 무시');
-        }
-      },
-      onIceCandidate: async (candidate, senderId) => {
-        console.log('🧊 [WebRTC.onIceCandidate] ICE Candidate 수신: sender=' + senderId + ', current=' + this.currentUserId);
-        
-        if (senderId !== this.currentUserId) {
+        },
+        onIceCandidate: async (candidate) => {
+          console.log('🧊 [WebRTC.onIceCandidate] ICE Candidate 수신');
+
           try {
             await this.handleIceCandidate(candidate);
+            console.log('✅ [WebRTC.onIceCandidate] ICE Candidate 추가 완료');
           } catch (error) {
             console.error('❌ [WebRTC.onIceCandidate] ICE Candidate 처리 실패:', error);
           }
         }
       }
-    });
-    
+    );
+
     console.log('✅ [WebRTC.startSignaling] 시그널링 구독 완료');
   }
 
@@ -637,7 +693,7 @@ export class WebRTCManager {
    */
   async cleanup() {
     console.log('🔵 [WebRTCManager] cleanup 시작');
-    
+
     // 로컬 스트림 중지
     if (this.localStream) {
       console.log('🔵 [WebRTCManager] 로컬 스트림 중지');
@@ -652,15 +708,13 @@ export class WebRTCManager {
       this.peerConnection = null;
     }
 
-    // 시그널링 구독 해제 (폴링 방식)
+    // 시그널링 구독 해제 (Realtime)
     if (this.signalChannel) {
-      console.log('🔵 [WebRTCManager] 시그널링 폴링 중지');
-      if (typeof this.signalChannel.unsubscribe === 'function') {
-        this.signalChannel.unsubscribe();
-      }
+      console.log('🔵 [WebRTCManager] 시그널링 구독 해제');
+      await supabase.removeChannel(this.signalChannel);
       this.signalChannel = null;
     }
-    
+
     // 상태 구독 해제
     if (this.statusChannel) {
       console.log('🔵 [WebRTCManager] 상태 구독 해제');
@@ -688,7 +742,7 @@ export class WebRTCManager {
    */
   forceCleanup() {
     console.log('🔵 [WebRTCManager] 강제 정리 시작');
-    
+
     // 즉시 모든 리소스 정리
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop());
@@ -701,9 +755,7 @@ export class WebRTCManager {
     }
 
     if (this.signalChannel) {
-      if (typeof this.signalChannel.unsubscribe === 'function') {
-        this.signalChannel.unsubscribe();
-      }
+      supabase.removeChannel(this.signalChannel);
       this.signalChannel = null;
     }
 

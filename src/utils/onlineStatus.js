@@ -131,7 +131,7 @@ class OnlineStatusManager {
   // 온라인 상태 구독
   async subscribeToOnlineStatus() {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .channel('user_online_status_changes')
         .on(
           'postgres_changes',
@@ -247,7 +247,7 @@ class OnlineStatusManager {
 
   // 모든 구독 해제
   unsubscribeAll() {
-    this.subscriptions.forEach((subscription, userId) => {
+    this.subscriptions.forEach((subscription, _userId) => {
       supabase.removeChannel(subscription);
     });
     this.subscriptions.clear();

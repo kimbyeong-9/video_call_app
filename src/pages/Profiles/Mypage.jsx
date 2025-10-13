@@ -189,7 +189,7 @@ const Mypage = () => {
 };
 
 const ProfileWrapper = styled.div`
-  padding: 20px 16px;
+  padding: 20px 0;
   padding-bottom: 70px;
   background: linear-gradient(135deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%);
 `;

@@ -13,7 +13,7 @@ const Recommend = () => {
 const RecommendWrapper = styled.div`
   width: 100%;
   height: 100%;
-  padding: 20px 16px;
+  padding: 20px 0;
   padding-bottom: 70px; // Bottom Tabs 높이만큼 여백
 `;
 

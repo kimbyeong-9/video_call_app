@@ -10,8 +10,8 @@
   --primary-dark-blue: #1A365D;
   
   /* 배경 컬러 */
-  --bg-gradient-1: #F8FAFF;
-  --bg-gradient-2: #EDF2FF;
+  --bg-gradient-1: #ffffff;
+  --bg-gradient-2: #ffffff;
   --bg-card: rgba(255, 255, 255, 0.95);
   
   /* 텍스트 컬러 */

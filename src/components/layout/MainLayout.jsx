@@ -26,11 +26,11 @@ const LayoutWrapper = styled.div`
 
 const MainContent = styled.main`
   flex: 1;
-  padding: 20px 16px;
+  padding: 20px 0;
   padding-bottom: 70px;
 
   @media screen and (min-width: 768px) {
-    padding: 40px 24px;
+    padding: 40px 0;
     padding-bottom: 80px;
   }
 `;

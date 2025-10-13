@@ -247,7 +247,7 @@ const Search = () => {
 };
 
 const SearchWrapper = styled.div`
-  padding: 20px 16px;
+  padding: 20px 0;
   padding-bottom: 70px;
 `;
 

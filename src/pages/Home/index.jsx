@@ -563,7 +563,7 @@ const HomeWrapper = styled.div`
 `;
 
 const Content = styled.div`
-  padding: 20px 16px;
+  padding: 20px 0;
 `;
 
 const LoadingContainer = styled.div`

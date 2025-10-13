@@ -185,6 +185,33 @@ export const videoCall = {
   },
 
   /**
+   * 비디오 토글 상태 전송
+   */
+  sendVideoToggle: async (callId, senderId, enabled) => {
+    try {
+      console.log('🔵 [sendVideoToggle] 비디오 상태 전송:', { callId, senderId, enabled });
+
+      const { data, error } = await supabase
+        .from('webrtc_signals')
+        .insert({
+          call_id: callId,
+          sender_id: senderId,
+          signal_type: 'video-toggle',
+          signal_data: { enabled }
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      console.log('✅ [sendVideoToggle] 비디오 상태 전송 완료');
+      return { data, error: null };
+    } catch (error) {
+      console.error('❌ [sendVideoToggle] 비디오 상태 전송 에러:', error);
+      return { data: null, error };
+    }
+  },
+
+  /**
    * 기존 시그널 조회 (수신자가 늦게 진입한 경우)
    */
   getExistingSignals: async (callId, currentUserId) => {
@@ -219,13 +246,13 @@ export const videoCall = {
     console.log('🔵 Current User ID:', currentUserId);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
+    // 랜덤 UUID 추가로 완전히 독립적인 채널 생성
+    const uniqueId = Math.random().toString(36).substring(2, 15);
+    const channelName = `webrtc-signals:${callId}:${currentUserId}:${uniqueId}`;
+    console.log('🔵 [subscribeToSignals] 고유 채널 이름:', channelName);
+
     const channel = supabase
-      .channel(`webrtc-signals:${callId}`, {
-        config: {
-          broadcast: { self: false },
-          presence: { key: currentUserId }
-        }
-      })
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -267,6 +294,10 @@ export const videoCall = {
               console.log('🧊 [subscribeToSignals] ICE Candidate 신호 처리');
               callbacks.onIceCandidate?.(signal_data.candidate, sender_id);
               break;
+            case 'video-toggle':
+              console.log('📹 [subscribeToSignals] 비디오 토글 신호 처리:', signal_data.enabled);
+              callbacks.onVideoToggle?.(signal_data.enabled, sender_id);
+              break;
             default:
               console.warn('⚠️ [subscribeToSignals] 알 수 없는 시그널 타입:', signal_type);
           }
@@ -278,6 +309,9 @@ export const videoCall = {
           console.log('✅ [subscribeToSignals] 시그널링 구독 완료!');
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ [subscribeToSignals] 채널 에러');
+          console.error('   채널 이름:', channelName);
+          console.error('   Call ID:', callId);
+          console.error('   User ID:', currentUserId);
         } else if (status === 'TIMED_OUT') {
           console.error('❌ [subscribeToSignals] 구독 타임아웃');
         }
@@ -404,6 +438,7 @@ export class WebRTCManager {
     this.remoteStream = null;
     this.signalChannel = null;
     this.statusChannel = null;
+    this.pendingIceCandidates = []; // ICE Candidate 큐 (remoteDescription 설정 전 도착한 것들)
   }
 
   /**
@@ -530,24 +565,27 @@ export class WebRTCManager {
     try {
       console.log('🔵 [WebRTC] Answer 생성 시작');
       console.log('🔵 [WebRTC] Remote Offer 수신:', offerSdp.type);
-      
+
       await this.peerConnection.setRemoteDescription(
         new RTCSessionDescription(offerSdp)
       );
       console.log('🔵 [WebRTC] Remote Description 설정 완료');
-      
+
       const answer = await this.peerConnection.createAnswer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true
       });
       console.log('🔵 [WebRTC] Answer 생성 완료:', answer.type);
-      
+
       await this.peerConnection.setLocalDescription(answer);
       console.log('🔵 [WebRTC] Local Description 설정 완료');
-      
+
       await videoCall.sendAnswer(this.callId, this.currentUserId, answer);
       console.log('✅ [WebRTC] Answer 전송 완료');
-      
+
+      // 큐에 저장된 ICE Candidate 처리
+      await this.processPendingIceCandidates();
+
       return answer;
     } catch (error) {
       console.error('❌ [WebRTC] Answer 생성 실패:', error);
@@ -561,16 +599,29 @@ export class WebRTCManager {
   async handleAnswer(answerSdp) {
     try {
       console.log('🔵 [WebRTC] Answer 수신 처리 시작');
+      console.log('🔵 [WebRTC] PeerConnection 현재 상태:', this.peerConnection.signalingState);
       console.log('🔵 [WebRTC] Remote Answer 수신:', answerSdp.type);
-      
+
+      // Answer는 'have-local-offer' 상태에서만 처리 가능
+      if (this.peerConnection.signalingState !== 'have-local-offer') {
+        console.warn('⚠️ [WebRTC] Answer 무시 - 잘못된 상태:', this.peerConnection.signalingState);
+        console.warn('   (Answer는 have-local-offer 상태에서만 처리 가능)');
+        return;
+      }
+
       await this.peerConnection.setRemoteDescription(
         new RTCSessionDescription(answerSdp)
       );
-      
+
       console.log('✅ [WebRTC] Answer 처리 완료 - PeerConnection 연결 시작');
+      console.log('✅ [WebRTC] 새로운 상태:', this.peerConnection.signalingState);
+
+      // 큐에 저장된 ICE Candidate 처리
+      await this.processPendingIceCandidates();
     } catch (error) {
       console.error('❌ [WebRTC] Answer 처리 실패:', error);
-      throw error;
+      console.error('   상태:', this.peerConnection.signalingState);
+      // 에러를 throw하지 않고 로그만 남김 (이미 처리된 Answer일 수 있음)
     }
   }
 
@@ -580,16 +631,63 @@ export class WebRTCManager {
   async handleIceCandidate(candidate) {
     try {
       console.log('🔵 [WebRTC] ICE Candidate 수신:', candidate.candidate);
-      
+
+      // remoteDescription이 아직 설정되지 않았다면 큐에 저장
+      if (!this.peerConnection.remoteDescription) {
+        console.log('⏳ [WebRTC] remoteDescription 없음 - ICE Candidate를 큐에 저장');
+        this.pendingIceCandidates.push(candidate);
+        console.log(`📦 [WebRTC] 큐에 저장된 ICE Candidate 개수: ${this.pendingIceCandidates.length}`);
+        return;
+      }
+
+      // remoteDescription이 있으면 바로 추가
       await this.peerConnection.addIceCandidate(
         new RTCIceCandidate(candidate)
       );
-      
+
       console.log('✅ [WebRTC] ICE Candidate 추가 완료');
     } catch (error) {
       console.error('❌ [WebRTC] ICE Candidate 처리 실패:', error);
-      throw error;
+      // 에러를 throw하지 않고 로그만 남김 (다른 candidate로 연결 가능)
     }
+  }
+
+  /**
+   * 큐에 저장된 ICE Candidate 처리
+   */
+  async processPendingIceCandidates() {
+    if (this.pendingIceCandidates.length === 0) {
+      console.log('📦 [WebRTC] 큐에 저장된 ICE Candidate 없음');
+      return;
+    }
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`📦 [WebRTC] 큐에 저장된 ICE Candidate 처리 시작: ${this.pendingIceCandidates.length}개`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const candidate of this.pendingIceCandidates) {
+      try {
+        await this.peerConnection.addIceCandidate(
+          new RTCIceCandidate(candidate)
+        );
+        successCount++;
+        console.log(`✅ [WebRTC] 큐 ICE Candidate 추가 성공 (${successCount}/${this.pendingIceCandidates.length})`);
+      } catch (error) {
+        failCount++;
+        console.warn(`⚠️ [WebRTC] 큐 ICE Candidate 추가 실패 (${failCount}개):`, error.message);
+        // 실패해도 계속 진행 (다른 candidate로 연결 가능)
+      }
+    }
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`✅ [WebRTC] 큐 처리 완료: 성공 ${successCount}개, 실패 ${failCount}개`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    // 큐 비우기
+    this.pendingIceCandidates = [];
   }
 
   /**
@@ -629,6 +727,10 @@ export class WebRTCManager {
             case 'ice-candidate':
               console.log('🧊 [WebRTC.startSignaling] 기존 ICE Candidate 처리');
               await this.handleIceCandidate(signal_data.candidate);
+              break;
+            case 'video-toggle':
+              console.log('📹 [WebRTC.startSignaling] 기존 비디오 토글 처리:', signal_data.enabled);
+              callbacks.onVideoToggle?.(signal_data.enabled);
               break;
             default:
               console.warn('⚠️ [WebRTC.startSignaling] 알 수 없는 시그널 타입:', signal_type);
@@ -681,6 +783,10 @@ export class WebRTCManager {
           } catch (error) {
             console.error('❌ [WebRTC.onIceCandidate] ICE Candidate 처리 실패:', error);
           }
+        },
+        onVideoToggle: (enabled) => {
+          console.log('📹 [WebRTC.onVideoToggle] 상대방 비디오 상태 변경:', enabled);
+          callbacks.onVideoToggle?.(enabled);
         }
       }
     );
@@ -693,6 +799,12 @@ export class WebRTCManager {
    */
   async cleanup() {
     console.log('🔵 [WebRTCManager] cleanup 시작');
+
+    // ICE Candidate 큐 비우기
+    if (this.pendingIceCandidates.length > 0) {
+      console.log(`🔵 [WebRTCManager] ICE Candidate 큐 비우기: ${this.pendingIceCandidates.length}개`);
+      this.pendingIceCandidates = [];
+    }
 
     // 로컬 스트림 중지
     if (this.localStream) {
@@ -743,6 +855,9 @@ export class WebRTCManager {
   forceCleanup() {
     console.log('🔵 [WebRTCManager] 강제 정리 시작');
 
+    // ICE Candidate 큐 비우기
+    this.pendingIceCandidates = [];
+
     // 즉시 모든 리소스 정리
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop());
@@ -771,11 +886,15 @@ export class WebRTCManager {
   /**
    * 비디오 토글
    */
-  toggleVideo(enabled) {
+  async toggleVideo(enabled) {
     if (this.localStream) {
       this.localStream.getVideoTracks().forEach(track => {
         track.enabled = enabled;
       });
+
+      // 상대방에게 비디오 상태 전송
+      await videoCall.sendVideoToggle(this.callId, this.currentUserId, enabled);
+      console.log('✅ [WebRTC] 비디오 상태 변경 및 전송 완료:', enabled);
     }
   }
 }

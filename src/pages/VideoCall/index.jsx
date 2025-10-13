@@ -18,6 +18,9 @@ const VideoCall = () => {
   const [callStatus, setCallStatus] = useState('연결 중...');
   const [connectionState, setConnectionState] = useState('new');
   const [callerInfo, setCallerInfo] = useState(null);
+  const [localUserInfo, setLocalUserInfo] = useState(null);
+  const [remoteUserInfo, setRemoteUserInfo] = useState(null);
+  const [remoteVideoEnabled, setRemoteVideoEnabled] = useState(true);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -93,10 +96,17 @@ const VideoCall = () => {
 
       console.log('✅ [VideoCall] 통화 정보:', callData);
 
+      // 현재 사용자 정보 저장
+      setLocalUserInfo(currentUser);
+
       // 발신자/수신자 정보 저장
       if (mode === 'receiver' && callData?.caller) {
         setCallerInfo(callData.caller);
+        setRemoteUserInfo(callData.caller);
         console.log('✅ [VideoCall] 발신자 정보 설정:', callData.caller.nickname);
+      } else if (mode === 'caller' && callData?.receiver) {
+        setRemoteUserInfo(callData.receiver);
+        console.log('✅ [VideoCall] 수신자 정보 설정:', callData.receiver.nickname);
       }
 
       // WebRTC Manager 초기화
@@ -138,6 +148,10 @@ const VideoCall = () => {
         onAnswer: () => {
           console.log('✅ [VideoCall] Answer 수신됨 (콜백)');
           setCallStatus('연결 중...');
+        },
+        onVideoToggle: (enabled) => {
+          console.log('📹 [VideoCall] 상대방 비디오 상태 변경:', enabled);
+          setRemoteVideoEnabled(enabled);
         }
       });
 
@@ -201,10 +215,10 @@ const VideoCall = () => {
     }
   };
 
-  const toggleVideo = () => {
+  const toggleVideo = async () => {
     if (webrtcManagerRef.current) {
       const newVideoState = !isVideoOff;
-      webrtcManagerRef.current.toggleVideo(!newVideoState);
+      await webrtcManagerRef.current.toggleVideo(!newVideoState);
       setIsVideoOff(newVideoState);
     }
   };
@@ -217,7 +231,23 @@ const VideoCall = () => {
           ref={remoteVideoRef}
           autoPlay
           playsInline
+          $hidden={!remoteVideoEnabled}
         />
+
+        {/* 원격 사용자 프로필 이미지 (비디오 꺼짐 시) */}
+        {remoteStream && !remoteVideoEnabled && remoteUserInfo && (
+          <RemoteProfileBox>
+            {remoteUserInfo.profile_image ? (
+              <ProfileImage src={remoteUserInfo.profile_image} alt={remoteUserInfo.nickname} />
+            ) : (
+              <ProfilePlaceholder>
+                {remoteUserInfo.nickname?.[0]?.toUpperCase() || '?'}
+              </ProfilePlaceholder>
+            )}
+            <ProfileName>{remoteUserInfo.nickname}</ProfileName>
+          </RemoteProfileBox>
+        )}
+
         {!remoteStream && (
           <PlaceholderBox>
             <PlaceholderText>
@@ -227,12 +257,28 @@ const VideoCall = () => {
         )}
 
         {/* 로컬 비디오 (작은 화면) */}
-        <LocalVideo
-          ref={localVideoRef}
-          autoPlay
-          playsInline
-          muted
-        />
+        <LocalVideoWrapper>
+          <LocalVideo
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted
+            $hidden={isVideoOff}
+          />
+
+          {/* 로컬 사용자 프로필 이미지 (비디오 꺼짐 시) */}
+          {isVideoOff && localUserInfo && (
+            <LocalProfileBox>
+              {localUserInfo.profile_image ? (
+                <LocalProfileImage src={localUserInfo.profile_image} alt={localUserInfo.nickname} />
+              ) : (
+                <LocalProfilePlaceholder>
+                  {localUserInfo.nickname?.[0]?.toUpperCase() || '?'}
+                </LocalProfilePlaceholder>
+              )}
+            </LocalProfileBox>
+          )}
+        </LocalVideoWrapper>
       </VideoContainer>
 
       {/* 상태 표시 */}
@@ -278,23 +324,133 @@ const RemoteVideo = styled.video`
   height: 100%;
   object-fit: cover;
   background: #1a1a1a;
+  display: ${props => props.$hidden ? 'none' : 'block'};
 `;
 
-const LocalVideo = styled.video`
+const RemoteProfileBox = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  z-index: 5;
+`;
+
+const ProfileImage = styled.img`
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+
+  @media (min-width: 768px) {
+    width: 300px;
+    height: 300px;
+  }
+`;
+
+const ProfilePlaceholder = styled.div`
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 80px;
+  font-weight: bold;
+  color: #fff;
+  border: 4px solid #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+
+  @media (min-width: 768px) {
+    width: 300px;
+    height: 300px;
+    font-size: 120px;
+  }
+`;
+
+const ProfileName = styled.div`
+  color: #fff;
+  font-size: 24px;
+  font-weight: 600;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+  @media (min-width: 768px) {
+    font-size: 32px;
+  }
+`;
+
+const LocalVideoWrapper = styled.div`
   position: absolute;
   top: 20px;
   right: 20px;
   width: 120px;
   height: 160px;
   border-radius: 12px;
-  object-fit: cover;
+  overflow: hidden;
   border: 2px solid #fff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 10;
+  background: #1a1a1a;
 
   @media (min-width: 768px) {
     width: 200px;
     height: 266px;
+  }
+`;
+
+const LocalVideo = styled.video`
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: ${props => props.$hidden ? 'none' : 'block'};
+`;
+
+const LocalProfileBox = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a1a1a;
+`;
+
+const LocalProfileImage = styled.img`
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+
+  @media (min-width: 768px) {
+    width: 120px;
+    height: 120px;
+  }
+`;
+
+const LocalProfilePlaceholder = styled.div`
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: bold;
+  color: #fff;
+
+  @media (min-width: 768px) {
+    width: 120px;
+    height: 120px;
+    font-size: 48px;
   }
 `;
 

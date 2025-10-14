@@ -29,38 +29,38 @@ const Home = () => {
     loadUserData();
     loadFriendsList();
 
-    // 소셜 로그인 성공 확인 (더 정확한 검증)
+    // 로그인 성공 플래그 확인 (sessionStorage)
     const socialLoginSuccess = sessionStorage.getItem('socialLoginSuccess');
     const loginMethod = sessionStorage.getItem('loginMethod');
-    
-    if (socialLoginSuccess === 'true' && loginMethod === 'google') {
-      setNotification({
-        show: true,
-        message: 'Google 로그인에 성공했습니다.',
-        type: 'success'
-      });
-      
-      // 3초 후 알림 자동 닫기
-      setTimeout(() => {
-        setNotification(prev => ({ ...prev, show: false }));
-      }, 3000);
-      
-      // 플래그 제거 (한 번만 표시)
+
+    // 이미 모달을 표시했는지 확인하는 플래그 (localStorage)
+    const hasShownLoginModal = localStorage.getItem('hasShownLoginModal');
+
+    // 로그인 플래그가 있고, 아직 모달을 보여주지 않은 경우에만 표시
+    if (socialLoginSuccess === 'true' && hasShownLoginModal !== 'true') {
+      // 플래그 즉시 제거 및 설정
       sessionStorage.removeItem('socialLoginSuccess');
       sessionStorage.removeItem('loginMethod');
-    } else if (socialLoginSuccess === 'true' && loginMethod === 'email') {
+      localStorage.setItem('hasShownLoginModal', 'true');
+
+      // 로그인 방법에 따른 메시지 표시
+      let message = '로그인에 성공했습니다.';
+      if (loginMethod === 'google') {
+        message = 'Google 로그인에 성공했습니다.';
+      }
+
       setNotification({
         show: true,
-        message: '로그인에 성공했습니다.',
+        message: message,
         type: 'success'
       });
-      
+
       // 3초 후 알림 자동 닫기
       setTimeout(() => {
         setNotification(prev => ({ ...prev, show: false }));
       }, 3000);
-      
-      // 플래그 제거
+    } else if (socialLoginSuccess === 'true') {
+      // 이미 모달을 표시한 적이 있으면 플래그만 제거
       sessionStorage.removeItem('socialLoginSuccess');
       sessionStorage.removeItem('loginMethod');
     }

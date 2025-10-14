@@ -22,6 +22,9 @@ function App() {
         if (event === 'SIGNED_OUT') {
           console.log('🔵 App.jsx - 로그아웃 감지, localStorage 정리');
           localStorage.removeItem('currentUser');
+          localStorage.removeItem('hasShownLoginModal'); // 로그인 모달 표시 플래그 제거
+          sessionStorage.removeItem('socialLoginSuccess');
+          sessionStorage.removeItem('loginMethod');
           setCurrentUserId(null);
         }
 

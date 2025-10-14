@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { FiArrowLeft } from 'react-icons/fi';
+import { FiArrowLeft, FiTrash2 } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
 import { useUnreadMessages } from '../../contexts/UnreadMessagesContext';
 
@@ -14,7 +14,10 @@ const Chatting = () => {
   const [loading, setLoading] = useState(true);
   const [participants, setParticipants] = useState([]);
   const [otherUser, setOtherUser] = useState(null);
+  const [selectedMessageId, setSelectedMessageId] = useState(null);
+  const [showDeleteButton, setShowDeleteButton] = useState(false);
   const chatContentRef = useRef(null);
+  const longPressTimerRef = useRef(null);
   const { markRoomAsRead } = useUnreadMessages();
 
   // 1️⃣ 페이지 진입 시 사용자 정보 가져오기 & 기존 메시지 불러오기
@@ -66,16 +69,26 @@ const Chatting = () => {
           console.log('🔵 새 메시지 수신:', payload.new);
 
           // 발신자 정보 가져오기
-          const { data: senderData } = await supabase
+          const { data: senderData, error: senderError } = await supabase
             .from('users')
-            .select('id, nickname, email')
+            .select('id, nickname, email, profile_image')
             .eq('id', payload.new.user_id)
             .single();
 
+          // 발신자 정보가 없으면 기본값 설정
           const messageWithSender = {
             ...payload.new,
-            sender: senderData
+            sender: senderData || {
+              id: payload.new.user_id,
+              nickname: '알 수 없는 사용자',
+              email: null,
+              profile_image: null
+            }
           };
+
+          if (senderError) {
+            console.warn('⚠️ 발신자 정보 조회 실패:', senderError);
+          }
 
           console.log('🔵 발신자 정보 포함된 메시지:', messageWithSender);
           setMessages((prev) => [...prev, messageWithSender]);
@@ -122,6 +135,9 @@ const Chatting = () => {
       console.log('🔵 parsedUser:', parsedUser);
       setCurrentUser(parsedUser);
 
+      // 상대방 정보 미리 로드
+      await loadOtherUserInfo(parsedUser);
+
       // 채팅방 입장 시 chat_rooms와 chat_participants 생성
       await createChatRoomIfNotExists(parsedUser);
 
@@ -135,6 +151,43 @@ const Chatting = () => {
     } finally {
       console.log('🔵 setLoading(false) 호출');
       setLoading(false);
+    }
+  };
+
+  // 상대방 정보 미리 로드 함수
+  const loadOtherUserInfo = async (currentUser) => {
+    try {
+      console.log('🔵 상대방 정보 로드 시작, roomId:', roomId);
+      
+      // roomId에서 상대방 ID 추출
+      const roomIdParts = roomId.replace('chat_', '').split('_');
+      const otherUserId = roomIdParts.find(id => id !== currentUser.id);
+      
+      if (!otherUserId) {
+        console.log('🔵 상대방 ID를 찾을 수 없음');
+        return;
+      }
+
+      console.log('🔵 상대방 ID:', otherUserId);
+
+      // 상대방 정보 조회
+      const { data: otherUserData, error } = await supabase
+        .from('users')
+        .select('id, nickname, email, profile_image')
+        .eq('id', otherUserId)
+        .single();
+
+      if (error) {
+        console.error('❌ 상대방 정보 조회 오류:', error);
+        return;
+      }
+
+      if (otherUserData) {
+        console.log('🔵 상대방 정보 로드 완료:', otherUserData);
+        setOtherUser(otherUserData);
+      }
+    } catch (error) {
+      console.error('❌ 상대방 정보 로드 오류:', error);
     }
   };
 
@@ -293,11 +346,28 @@ const Chatting = () => {
 
       console.log('🔵 메시지 개수:', messagesData.length);
 
-      // 2. 각 메시지의 사용자 정보 가져오기 (간소화)
+      // 2. 현재 사용자가 숨긴 메시지 조회
+      const { data: hiddenMessagesData, error: hiddenError } = await supabase
+        .from('hidden_messages')
+        .select('message_id')
+        .eq('user_id', currentUser?.id);
+
+      if (hiddenError) {
+        console.warn('⚠️ 숨겨진 메시지 조회 실패:', hiddenError);
+      }
+
+      const hiddenMessageIds = new Set(hiddenMessagesData?.map(h => h.message_id) || []);
+      console.log('🔵 숨겨진 메시지 ID들:', hiddenMessageIds);
+
+      // 3. 숨겨진 메시지 필터링
+      const filteredMessages = messagesData.filter(msg => !hiddenMessageIds.has(msg.id));
+      console.log('🔵 필터링 후 메시지 개수:', filteredMessages.length);
+
+      // 4. 각 메시지의 사용자 정보 가져오기 (간소화)
       const messagesWithSender = [];
       const userCache = {};
 
-      for (const msg of messagesData) {
+      for (const msg of filteredMessages) {
         try {
           console.log(`🔵 메시지 ${msg.id}의 사용자 정보 조회:`, msg.user_id);
 
@@ -406,6 +476,182 @@ const Chatting = () => {
     }
   };
 
+  // 롱프레스 핸들러
+  const handleMessageLongPress = (messageId, isOwnMessage) => {
+    setSelectedMessageId(messageId);
+    setShowDeleteButton(true);
+  };
+
+  const handleMessagePressStart = (messageId, isOwnMessage) => {
+    longPressTimerRef.current = setTimeout(() => {
+      handleMessageLongPress(messageId, isOwnMessage);
+    }, 500); // 500ms 후 롱프레스 인식
+  };
+
+  const handleMessagePressEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleMessageClick = () => {
+    // 일반 클릭 시 삭제 버튼 숨기기
+    if (showDeleteButton) {
+      setShowDeleteButton(false);
+      setSelectedMessageId(null);
+    }
+  };
+
+  // 메시지 삭제/숨기기 함수
+  const handleDeleteMessage = async (messageId, isOwnMessage) => {
+    if (!currentUser) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    if (isOwnMessage) {
+      // 자신의 메시지: 완전 삭제
+      const confirmDelete = window.confirm('이 메시지를 삭제하시겠습니까?');
+      if (!confirmDelete) return;
+
+      try {
+        console.log('🔵 메시지 삭제 시작, messageId:', messageId);
+
+        const { error } = await supabase
+          .from('messages')
+          .delete()
+          .eq('id', messageId)
+          .eq('user_id', currentUser.id);
+
+        if (error) {
+          console.error('❌ 메시지 삭제 오류:', error);
+          throw error;
+        }
+
+        // 로컬 상태에서도 메시지 제거
+        setMessages(prev => prev.filter(msg => msg.id !== messageId));
+        
+        console.log('✅ 메시지 삭제 완료');
+        setShowDeleteButton(false);
+        setSelectedMessageId(null);
+        
+      } catch (error) {
+        console.error('❌ 메시지 삭제 오류:', error);
+        alert('메시지 삭제에 실패했습니다: ' + error.message);
+      }
+    } else {
+      // 상대방의 메시지: 나에게만 숨기기
+      const confirmHide = window.confirm('이 메시지를 나에게만 숨기시겠습니까?');
+      if (!confirmHide) return;
+
+      try {
+        console.log('🔵 메시지 숨기기 시작, messageId:', messageId);
+
+        const { error } = await supabase
+          .from('hidden_messages')
+          .insert({
+            user_id: currentUser.id,
+            message_id: messageId
+          });
+
+        if (error) {
+          console.error('❌ 메시지 숨기기 오류:', error);
+          throw error;
+        }
+
+        // 로컬 상태에서도 메시지 제거
+        setMessages(prev => prev.filter(msg => msg.id !== messageId));
+        
+        console.log('✅ 메시지 숨기기 완료');
+        setShowDeleteButton(false);
+        setSelectedMessageId(null);
+        
+      } catch (error) {
+        console.error('❌ 메시지 숨기기 오류:', error);
+        alert('메시지 숨기기에 실패했습니다: ' + error.message);
+      }
+    }
+  };
+
+  const handleExitChat = async () => {
+    if (!currentUser) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    const confirmExit = window.confirm('채팅방을 나가시겠습니까? 채팅방이 삭제됩니다.');
+    if (!confirmExit) return;
+
+    try {
+      console.log('🔵 채팅방 나가기 시작, roomId:', roomId, 'userId:', currentUser.id);
+
+      // 1. 현재 사용자를 chat_participants에서 제거
+      const { error: participantError } = await supabase
+        .from('chat_participants')
+        .delete()
+        .eq('room_id', roomId)
+        .eq('user_id', currentUser.id);
+
+      if (participantError) {
+        console.error('❌ 참가자 제거 오류:', participantError);
+        throw participantError;
+      }
+
+      console.log('✅ 참가자 제거 완료');
+
+      // 2. 남은 참가자가 있는지 확인
+      const { data: remainingParticipants, error: checkError } = await supabase
+        .from('chat_participants')
+        .select('user_id')
+        .eq('room_id', roomId);
+
+      if (checkError) {
+        console.error('❌ 남은 참가자 확인 오류:', checkError);
+        throw checkError;
+      }
+
+      console.log('🔵 남은 참가자 수:', remainingParticipants?.length || 0);
+
+      // 3. 참가자가 없으면 채팅방과 메시지 삭제
+      if (!remainingParticipants || remainingParticipants.length === 0) {
+        console.log('🔵 참가자가 없으므로 채팅방 삭제');
+
+        // 메시지 삭제
+        const { error: messagesError } = await supabase
+          .from('messages')
+          .delete()
+          .eq('room_id', roomId);
+
+        if (messagesError) {
+          console.error('❌ 메시지 삭제 오류:', messagesError);
+          throw messagesError;
+        }
+
+        // 채팅방 삭제
+        const { error: roomError } = await supabase
+          .from('chat_rooms')
+          .delete()
+          .eq('id', roomId);
+
+        if (roomError) {
+          console.error('❌ 채팅방 삭제 오류:', roomError);
+          throw roomError;
+        }
+
+        console.log('✅ 채팅방과 메시지 삭제 완료');
+      }
+
+      // 4. 채팅방 목록으로 이동
+      alert('채팅방을 나갔습니다.');
+      navigate('/chatlist');
+
+    } catch (error) {
+      console.error('❌ 채팅방 나가기 오류:', error);
+      alert('채팅방 나가기에 실패했습니다: ' + error.message);
+    }
+  };
+
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -456,8 +702,12 @@ const Chatting = () => {
         <BackButton onClick={() => navigate(-1)}>
           <FiArrowLeft size={22} />
         </BackButton>
-        <RoomTitle>{otherUser?.nickname || `채팅방 ${roomId}`}</RoomTitle>
-        <HeaderSpacer />
+        <RoomTitle>
+          {otherUser?.nickname || '상대방 정보 로딩 중...'}
+        </RoomTitle>
+        <ExitButton onClick={handleExitChat}>
+          <FiTrash2 size={20} />
+        </ExitButton>
       </ChatHeader>
 
       <ChatContent ref={chatContentRef}>
@@ -467,8 +717,10 @@ const Chatting = () => {
           messages.map((msg, index) => {
             const isOwn = msg.user_id === currentUser?.id;
             const senderName = msg.sender?.nickname || msg.sender?.email?.split('@')[0] || '익명';
-            // 프로필 이미지가 로드되지 않았으면 로딩 상태 표시
-            const senderImage = msg.sender?.profile_image || (msg.sender ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${senderName}` : null);
+            // 프로필 이미지 처리 - 실시간 메시지 수신 시에도 올바른 이미지 표시
+            const senderImage = msg.sender?.profile_image && msg.sender.profile_image.trim() !== '' 
+              ? msg.sender.profile_image 
+              : (msg.sender ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${senderName}` : null);
 
             // 이전 메시지와 비교하여 같은 분 단위인지 확인
             const prevMsg = index > 0 ? messages[index - 1] : null;
@@ -511,7 +763,17 @@ const Chatting = () => {
                     )}
                     <MessageContent>
                       {showTimeAndProfile && <SenderName>{senderName}</SenderName>}
-                      <MessageBubble $isOwn={isOwn} title={formatFullTime(msg.created_at)}>
+                      <MessageBubble 
+                        $isOwn={isOwn} 
+                        $isSelected={selectedMessageId === msg.id}
+                        title={formatFullTime(msg.created_at)}
+                        onMouseDown={() => handleMessagePressStart(msg.id, isOwn)}
+                        onMouseUp={handleMessagePressEnd}
+                        onMouseLeave={handleMessagePressEnd}
+                        onTouchStart={() => handleMessagePressStart(msg.id, isOwn)}
+                        onTouchEnd={handleMessagePressEnd}
+                        onClick={handleMessageClick}
+                      >
                         <MessageText>{msg.content}</MessageText>
                         {showTimeAndProfile && <MessageTime>{formatTime(msg.created_at)}</MessageTime>}
                       </MessageBubble>
@@ -519,10 +781,30 @@ const Chatting = () => {
                   </MessageGroup>
                 )}
                 {isOwn && (
-                  <MessageBubble $isOwn={isOwn} title={formatFullTime(msg.created_at)}>
+                  <MessageBubble 
+                    $isOwn={isOwn} 
+                    $isSelected={selectedMessageId === msg.id}
+                    title={formatFullTime(msg.created_at)}
+                    onMouseDown={() => handleMessagePressStart(msg.id, isOwn)}
+                    onMouseUp={handleMessagePressEnd}
+                    onMouseLeave={handleMessagePressEnd}
+                    onTouchStart={() => handleMessagePressStart(msg.id, isOwn)}
+                    onTouchEnd={handleMessagePressEnd}
+                    onClick={handleMessageClick}
+                  >
                     <MessageText>{msg.content}</MessageText>
                     {showMyMessageTime && <MessageTime>{formatTime(msg.created_at)}</MessageTime>}
                   </MessageBubble>
+                )}
+                
+                {/* 삭제/숨기기 버튼 */}
+                {showDeleteButton && selectedMessageId === msg.id && (
+                  <DeleteButtonContainer>
+                    <DeleteButton onClick={() => handleDeleteMessage(msg.id, isOwn)}>
+                      <FiTrash2 size={16} />
+                      {isOwn ? '삭제' : '숨기기'}
+                    </DeleteButton>
+                  </DeleteButtonContainer>
                 )}
               </MessageWrapper>
             );
@@ -589,17 +871,37 @@ const BackButton = styled.button`
 `;
 
 const RoomTitle = styled.h1`
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 1.2rem;
+  font-weight: 700;
   margin: 0;
   color: var(--text-primary);
   flex: 1;
   text-align: center;
   letter-spacing: -0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 `;
 
-const HeaderSpacer = styled.div`
-  width: 40px;
+const ExitButton = styled.button`
+  border: none;
+  background-color: transparent;
+  color: #dc2626;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: rgba(220, 38, 38, 0.1);
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+    background-color: rgba(220, 38, 38, 0.2);
+  }
 `;
 
 const ChatContent = styled.div`
@@ -701,6 +1003,19 @@ const MessageBubble = styled.div`
   background-color: ${props => props.$isOwn ? '#007aff' : '#ffffff'};
   color: ${props => props.$isOwn ? '#ffffff' : '#000000'};
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  
+  ${props => props.$isSelected && `
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    background-color: ${props.$isOwn ? '#0056b3' : '#f0f0f0'};
+  `}
+  
+  &:active {
+    transform: scale(0.98);
+  }
 `;
 
 const MessageText = styled.p`
@@ -755,6 +1070,51 @@ const SendButton = styled.button`
   &:disabled {
     background-color: #cccccc;
     cursor: not-allowed;
+  }
+`;
+
+const DeleteButtonContainer = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  animation: slideIn 0.2s ease-out;
+  
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+`;
+
+const DeleteButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+
+  &:hover {
+    background-color: #b91c1c;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
   }
 `;
 

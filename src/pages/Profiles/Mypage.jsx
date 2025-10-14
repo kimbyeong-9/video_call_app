@@ -142,7 +142,7 @@ const Mypage = () => {
     const genderMap = {
       'male': '남성',
       'female': '여성',
-      'prefer_not_to_say': '선택 안함'
+      'prefer_not_to_say': '비공개'
     };
     return genderMap[gender] || gender;
   };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { FiVideo, FiMessageCircle, FiUserPlus, FiUserCheck } from 'react-icons/fi';
+import { FiVideo, FiMessageCircle, FiUserPlus, FiUserCheck, FiUser, FiHeart } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
 import CommentIcon from '../../assets/images/comment_17619813.png';
 import NotificationPopup from '../../components/common/NotificationPopup';
@@ -478,6 +478,27 @@ const Home = () => {
                     <OnlineIndicatorLarge $isOnline={getUserOnlineStatus(user.id).is_online} />
                     <UserInfoLarge>
                       <UserNameLarge>{user.nickname}</UserNameLarge>
+                      {user.gender && user.gender.trim() !== '' && (
+                        <UserGenderLarge>
+                          <GenderInfo $gender={user.gender}>
+                            {user.gender === 'male' ? (
+                              <FiUser size={16} />
+                            ) : user.gender === 'female' ? (
+                              <FiHeart size={16} />
+                            ) : user.gender === 'prefer_not_to_say' ? (
+                              <FiUser size={16} />
+                            ) : (
+                              <FiUser size={16} />
+                            )}
+                            <GenderText>
+                              {user.gender === 'male' ? '남성' : 
+                               user.gender === 'female' ? '여성' : 
+                               user.gender === 'prefer_not_to_say' ? '비공개' :
+                               user.gender}
+                            </GenderText>
+                          </GenderInfo>
+                        </UserGenderLarge>
+                      )}
                       <UserBioLarge>{user.bio || '소개가 없습니다.'}</UserBioLarge>
                       <UserInterestsLarge>
                         {user.interests && user.interests.length > 0 ? (
@@ -720,9 +741,73 @@ const UserNameLarge = styled.h3`
   font-size: 28px;
   font-weight: 700;
   color: white;
-  margin: 0 0 12px 0;
+  margin: 0 0 8px 0;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   letter-spacing: -0.5px;
+`;
+
+const UserGenderLarge = styled.div`
+  margin-bottom: 12px;
+`;
+
+const GenderInfo = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== '$gender',
+})`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: ${props => {
+    switch (props.$gender) {
+      case 'male':
+        return 'rgba(59, 130, 246, 0.2)'; // 파란색 계열
+      case 'female':
+        return 'rgba(236, 72, 153, 0.2)'; // 핑크색 계열
+      case 'prefer_not_to_say':
+        return 'rgba(107, 114, 128, 0.2)'; // 회색 계열
+      default:
+        return 'rgba(255, 255, 255, 0.15)';
+    }
+  }};
+  backdrop-filter: blur(10px);
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid ${props => {
+    switch (props.$gender) {
+      case 'male':
+        return 'rgba(59, 130, 246, 0.4)'; // 파란색 테두리
+      case 'female':
+        return 'rgba(236, 72, 153, 0.4)'; // 핑크색 테두리
+      case 'prefer_not_to_say':
+        return 'rgba(107, 114, 128, 0.4)'; // 회색 테두리
+      default:
+        return 'rgba(255, 255, 255, 0.2)';
+    }
+  }};
+  width: fit-content;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: ${props => {
+      switch (props.$gender) {
+        case 'male':
+          return 'rgba(59, 130, 246, 0.3)';
+        case 'female':
+          return 'rgba(236, 72, 153, 0.3)';
+        case 'prefer_not_to_say':
+          return 'rgba(107, 114, 128, 0.3)';
+        default:
+          return 'rgba(255, 255, 255, 0.25)';
+      }
+    }};
+    transform: translateY(-1px);
+  }
+`;
+
+const GenderText = styled.span`
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 `;
 
 const UserBioLarge = styled.p`

@@ -17,15 +17,15 @@ const UserProfile = () => {
 
   // 성별 데이터를 한국어로 변환하는 헬퍼 함수
   const getGenderLabel = (gender) => {
-    if (!gender) return null;
+    if (!gender || gender.trim() === '') return '미설정';
     
     const genderMap = {
       'male': '남성',
       'female': '여성',
-      'prefer_not_to_say': '선택 안함'
+      'prefer_not_to_say': '비공개'
     };
     
-    return genderMap[gender] || null;
+    return genderMap[gender] || gender;
   };
 
   // 지역 데이터를 한국어로 변환하는 헬퍼 함수
@@ -247,12 +247,10 @@ const UserProfile = () => {
         )}
 
         <ProfileDetails>
-          {getGenderLabel(userData.gender) && (
-            <DetailItem>
-              <DetailLabel>성별</DetailLabel>
-              <DetailValue>{getGenderLabel(userData.gender)}</DetailValue>
-            </DetailItem>
-          )}
+          <DetailItem>
+            <DetailLabel>성별</DetailLabel>
+            <DetailValue>{getGenderLabel(userData.gender)}</DetailValue>
+          </DetailItem>
           {getLocationLabel(userData.location) && (
             <DetailItem>
               <DetailLabel>내 동네</DetailLabel>

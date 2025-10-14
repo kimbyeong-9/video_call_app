@@ -2,16 +2,13 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiSearch } from 'react-icons/fi';
-import { IoIosArrowDown, IoIosArrowUp } from 'react-icons/io';
 import { supabase } from '../../utils/supabase';
 import { onlineStatusManager } from '../../utils/onlineStatus';
 
 const Search = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
-  const [isRecommendOpen, setIsRecommendOpen] = useState(true);
   const [searchResults, setSearchResults] = useState([]);
-  const [recommendedUsers, setRecommendedUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState(new Map()); // 온라인 사용자 상태
@@ -19,12 +16,6 @@ const Search = () => {
   useEffect(() => {
     getCurrentUser();
   }, []);
-
-  useEffect(() => {
-    if (currentUserId) {
-      loadRecommendedUsers();
-    }
-  }, [currentUserId]);
 
   // 온라인 상태 관리
   useEffect(() => {
@@ -68,28 +59,6 @@ const Search = () => {
     }
   };
 
-  const loadRecommendedUsers = async () => {
-    try {
-      // Supabase에서 최근 가입한 사용자들을 추천으로 표시 (자기 자신 제외)
-      const { data: users, error } = await supabase
-        .from('users')
-        .select('id, nickname, email, bio, profile_image, created_at, interests')
-        .neq('id', currentUserId)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (error) {
-        console.error('Search - 추천 사용자 조회 오류:', error);
-        setRecommendedUsers([]);
-        return;
-      }
-
-      setRecommendedUsers(users || []);
-    } catch (error) {
-      console.error('Search - 추천 사용자 로드 오류:', error);
-      setRecommendedUsers([]);
-    }
-  };
 
   // 사용자의 온라인 상태 확인
   const getUserOnlineStatus = (userId) => {
@@ -147,53 +116,6 @@ const Search = () => {
         </SearchButton>
       </SearchForm>
 
-      <RecommendSection>
-        <RecommendHeader onClick={() => setIsRecommendOpen(!isRecommendOpen)}>
-          <h3>추천 유저</h3>
-          {isRecommendOpen ? <IoIosArrowUp /> : <IoIosArrowDown />}
-        </RecommendHeader>
-        
-        {isRecommendOpen && (
-          <RecommendContent>
-            {recommendedUsers.map(user => (
-              <UserCard key={user.id} onClick={() => navigate(`/profiles/${user.id}`)}>
-                <ProfileSection>
-                  <ProfileImage 
-                    src={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`} 
-                    alt={user.nickname} 
-                  />
-                  <OnlineIndicator $isOnline={getUserOnlineStatus(user.id).is_online} />
-                </ProfileSection>
-                
-                <UserInfo>
-                  <UserHeader>
-                    <Nickname>{user.nickname}</Nickname>
-                    <JoinDate>{new Date(user.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} 가입</JoinDate>
-                  </UserHeader>
-                  
-                  {user.bio && (
-                    <Bio>{user.bio}</Bio>
-                  )}
-                  
-                  {user.interests && user.interests.length > 0 && (
-                    <InterestTags>
-                      {Array.isArray(user.interests) 
-                        ? user.interests.slice(0, 3).map((interest, index) => (
-                            <InterestTag key={index}>{interest}</InterestTag>
-                          ))
-                        : null
-                      }
-                      {user.interests.length > 3 && (
-                        <InterestTag>+{user.interests.length - 3}</InterestTag>
-                      )}
-                    </InterestTags>
-                  )}
-                </UserInfo>
-              </UserCard>
-            ))}
-          </RecommendContent>
-        )}
-      </RecommendSection>
 
       {searchTerm && (
         <SearchResults>
@@ -284,41 +206,6 @@ const SearchButton = styled.button`
   }
 `;
 
-const RecommendSection = styled.div`
-  background: white;
-  border-radius: 16px;
-  overflow: hidden;
-  margin-bottom: 24px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  border: 1px solid #f0f0f0;
-`;
-
-const RecommendHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  cursor: pointer;
-  background-color: #fafafa;
-  border-bottom: 1px solid #f0f0f0;
-  transition: background-color 0.2s ease;
-  
-  &:hover {
-    background-color: #f5f5f5;
-  }
-  
-  h3 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: #333;
-  }
-`;
-
-const RecommendContent = styled.div`
-  display: flex;
-  flex-direction: column;
-`;
 
 const SearchResults = styled.div`
   margin-top: 24px;

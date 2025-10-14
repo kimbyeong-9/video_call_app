@@ -74,8 +74,8 @@ export class LivePresenceManager {
         });
 
       // 채널 구독
-      const status = await this.channel.subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
+      this.channel.subscribe(async (subscriptionStatus) => {
+        if (subscriptionStatus === 'SUBSCRIBED') {
           console.log('✅ [LivePresence] 채널 구독 완료');
 
           // Presence 상태 추적 시작
@@ -90,9 +90,9 @@ export class LivePresenceManager {
           });
 
           console.log('✅ [LivePresence] Presence 추적 시작:', trackStatus);
-        } else if (status === 'CHANNEL_ERROR') {
+        } else if (subscriptionStatus === 'CHANNEL_ERROR') {
           console.error('❌ [LivePresence] 채널 에러');
-        } else if (status === 'TIMED_OUT') {
+        } else if (subscriptionStatus === 'TIMED_OUT') {
           console.error('❌ [LivePresence] 구독 타임아웃');
         }
       });
@@ -112,13 +112,21 @@ export class LivePresenceManager {
       console.log('🔵 [LivePresence] Live 페이지 퇴장 시작');
 
       if (this.channel) {
-        // Presence 추적 중지
-        await this.channel.untrack();
-        console.log('✅ [LivePresence] Presence 추적 중지');
+        try {
+          // Presence 추적 중지
+          await this.channel.untrack();
+          console.log('✅ [LivePresence] Presence 추적 중지');
+        } catch (error) {
+          console.warn('⚠️ [LivePresence] untrack 실패 (무시):', error.message);
+        }
 
-        // 채널 구독 해제
-        await supabase.removeChannel(this.channel);
-        console.log('✅ [LivePresence] 채널 구독 해제');
+        try {
+          // 채널 구독 해제
+          await supabase.removeChannel(this.channel);
+          console.log('✅ [LivePresence] 채널 구독 해제');
+        } catch (error) {
+          console.warn('⚠️ [LivePresence] removeChannel 실패 (무시):', error.message);
+        }
 
         this.channel = null;
       }

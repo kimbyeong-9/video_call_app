@@ -25,23 +25,39 @@ const Live = () => {
         const storedUser = localStorage.getItem('currentUser');
         if (!storedUser) {
           console.log('🔵 Live - 로그인 필요');
-          navigate('/login');
+          navigate('/');
           return;
         }
 
-        const user = JSON.parse(storedUser);
-        if (isMounted) {
-          setCurrentUser(user);
-          console.log('🔵 Live - 현재 사용자:', user.id);
+        const basicUser = JSON.parse(storedUser);
+        console.log('🔵 Live - localStorage 사용자:', basicUser);
+
+        // Supabase에서 완전한 사용자 정보 가져오기
+        const { data: fullUserData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', basicUser.id)
+          .single();
+
+        if (userError || !fullUserData) {
+          console.error('❌ Live - 사용자 정보 조회 실패:', userError);
+          navigate('/');
+          return;
         }
 
-        // Presence 채널에 참여
-        const joined = await livePresenceManager.join(user.id, {
-          nickname: user.nickname,
-          email: user.email,
-          profile_image: user.profile_image,
-          bio: user.bio,
-          interests: user.interests,
+        console.log('✅ Live - Supabase에서 가져온 전체 사용자 정보:', fullUserData);
+
+        if (isMounted) {
+          setCurrentUser(fullUserData);
+        }
+
+        // Presence 채널에 참여 (Supabase에서 가져온 정확한 데이터 사용)
+        const joined = await livePresenceManager.join(fullUserData.id, {
+          nickname: fullUserData.nickname || fullUserData.email?.split('@')[0],
+          email: fullUserData.email,
+          profile_image: fullUserData.profile_image,
+          bio: fullUserData.bio,
+          interests: fullUserData.interests,
         });
 
         if (!joined) {
@@ -51,19 +67,66 @@ const Live = () => {
         }
 
         // Presence 상태 변경 리스너 등록
-        unsubscribePresence = livePresenceManager.onPresenceChange((onlineUsers) => {
+        unsubscribePresence = livePresenceManager.onPresenceChange(async (onlineUsers) => {
           console.log('🔵 Live - 접속 중인 유저 업데이트:', onlineUsers.length, '명');
+          console.log('🔵 Live - Presence 유저 데이터:', onlineUsers);
 
-          // 프로필 이미지가 없는 경우 기본 이미지 설정
-          const usersWithImages = onlineUsers.map(u => ({
-            ...u,
-            profileImage: u.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.nickname}`,
-            interests: u.interests || [],
-            bio: u.bio || '안녕하세요!',
-          }));
+          // Supabase에서 각 유저의 최신 정보 가져오기
+          const userIds = onlineUsers.map(u => u.id);
+
+          if (userIds.length === 0) {
+            if (isMounted) {
+              setUsers([]);
+              setLoading(false);
+            }
+            return;
+          }
+
+          const { data: usersFromDB, error: usersError } = await supabase
+            .from('users')
+            .select('*')
+            .in('id', userIds);
+
+          if (usersError) {
+            console.error('❌ Live - 유저 정보 조회 실패:', usersError);
+            // Presence 데이터 그대로 사용
+            const usersWithImages = onlineUsers.map(u => ({
+              ...u,
+              profileImage: u.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.nickname}`,
+              interests: u.interests || [],
+              bio: u.bio || '안녕하세요!',
+            }));
+
+            if (isMounted) {
+              setUsers(usersWithImages);
+              setLoading(false);
+            }
+            return;
+          }
+
+          console.log('✅ Live - Supabase에서 가져온 유저 정보:', usersFromDB);
+
+          // Supabase DB 데이터와 Presence 데이터 병합
+          const mergedUsers = usersFromDB.map(dbUser => {
+            const presenceUser = onlineUsers.find(u => u.id === dbUser.id);
+            return {
+              id: dbUser.id,
+              nickname: dbUser.nickname || dbUser.email?.split('@')[0],
+              email: dbUser.email,
+              profile_image: dbUser.profile_image,
+              profileImage: dbUser.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${dbUser.nickname}`,
+              bio: dbUser.bio || '안녕하세요!',
+              interests: dbUser.interests || [],
+              status: '온라인',
+              statusType: 'online',
+              online_at: presenceUser?.online_at || new Date().toISOString(),
+            };
+          });
+
+          console.log('✅ Live - 병합된 유저 데이터:', mergedUsers);
 
           if (isMounted) {
-            setUsers(usersWithImages);
+            setUsers(mergedUsers);
             setLoading(false);
           }
         });
@@ -140,7 +203,7 @@ const Live = () => {
 
       if (!currentUser) {
         alert('로그인이 필요합니다.');
-        navigate('/login');
+        navigate('/');
         return;
       }
 
@@ -200,6 +263,10 @@ const Live = () => {
           <strong>현재 사용자:</strong> {currentUser.nickname} ({currentUser.email})
           <br />
           <strong>User ID:</strong> {currentUser.id}
+          <br />
+          <strong>프로필 이미지:</strong> {currentUser.profile_image ? '설정됨' : '미설정'}
+          <br />
+          <strong>접속 중인 유저:</strong> {users.length}명
         </DebugInfo>
       )}
 

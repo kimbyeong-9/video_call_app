@@ -99,6 +99,61 @@ const Home = () => {
     };
   }, [userProfile?.id]);
 
+  // 터치 이벤트 리스너를 non-passive로 설정
+  useEffect(() => {
+    const sliderElement = sliderRef.current;
+    if (!sliderElement) return;
+
+    const handleTouchMoveNonPassive = (e) => {
+      if (!isDragging) return;
+      
+      // 세로 스크롤 방지
+      e.preventDefault();
+      
+      const touch = e.touches[0].clientX;
+      setCurrentX(touch);
+      
+      // 드래그 중 실시간으로 카드 이동 효과
+      const diff = touch - startX;
+      setDragOffset(diff);
+    };
+
+    const handleTouchStartNonPassive = (e) => {
+      setStartX(e.touches[0].clientX);
+      setCurrentX(e.touches[0].clientX);
+      setIsDragging(true);
+    };
+
+    const handleTouchEndNonPassive = () => {
+      if (!isDragging) return;
+      
+      const diff = startX - currentX;
+      const threshold = 50; // 드래그 임계값
+      
+      if (Math.abs(diff) > threshold) {
+        if (diff > 0 && currentIndex < recommendedUsers.length - 1) {
+          setCurrentIndex(currentIndex + 1);
+        } else if (diff < 0 && currentIndex > 0) {
+          setCurrentIndex(currentIndex - 1);
+        }
+      }
+      
+      setIsDragging(false);
+      setDragOffset(0);
+    };
+
+    // non-passive 이벤트 리스너 추가
+    sliderElement.addEventListener('touchstart', handleTouchStartNonPassive, { passive: false });
+    sliderElement.addEventListener('touchmove', handleTouchMoveNonPassive, { passive: false });
+    sliderElement.addEventListener('touchend', handleTouchEndNonPassive, { passive: false });
+
+    return () => {
+      sliderElement.removeEventListener('touchstart', handleTouchStartNonPassive);
+      sliderElement.removeEventListener('touchmove', handleTouchMoveNonPassive);
+      sliderElement.removeEventListener('touchend', handleTouchEndNonPassive);
+    };
+  }, [isDragging, startX, currentX, currentIndex, recommendedUsers.length]);
+
   const loadUserData = async () => {
     try {
       // 현재 Supabase Auth 세션 확인
@@ -416,46 +471,6 @@ const Home = () => {
     return onlineUsers.get(userId) || { is_online: false };
   };
 
-  const handleTouchStart = (e) => {
-    setStartX(e.touches[0].clientX);
-    setCurrentX(e.touches[0].clientX);
-    setIsDragging(true);
-  };
-
-  const handleTouchMove = (e) => {
-    if (!isDragging) return;
-    
-    // 세로 스크롤 방지
-    e.preventDefault();
-    
-    const touch = e.touches[0].clientX;
-    setCurrentX(touch);
-    
-    // 드래그 중 실시간으로 카드 이동 효과
-    const diff = touch - startX;
-    setDragOffset(diff);
-  };
-
-  const handleTouchEnd = () => {
-    if (!isDragging) return;
-    
-    const diff = startX - currentX;
-    const threshold = 50; // 50px 이상 드래그 시 카드 전환
-    
-    if (Math.abs(diff) > threshold) {
-      if (diff > 0) {
-        handleNextUser(); // 왼쪽으로 스와이프 (다음)
-      } else {
-        handlePrevUser(); // 오른쪽으로 스와이프 (이전)
-      }
-    }
-    
-    // 상태 초기화
-    setIsDragging(false);
-    setStartX(0);
-    setCurrentX(0);
-    setDragOffset(0);
-  };
 
   const handleMouseDown = (e) => {
     setStartX(e.clientX);
@@ -590,9 +605,6 @@ const Home = () => {
             <SliderContainer>
               <SliderWrapper
                 ref={sliderRef}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}

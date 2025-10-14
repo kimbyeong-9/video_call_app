@@ -44,26 +44,36 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* 전체 화면 활용을 위한 추가 설정 */
+html {
+  width: 100vw;
+  height: 100vh;
+  overflow-x: hidden;
+}
+
+body {
+  width: 100vw;
+  height: 100vh;
+  overflow-x: hidden;
+}
+
 #root {
   width: 100%;
   height: 100%;
-  margin: 0 auto;
+  margin: 0;
   position: relative;
   background: linear-gradient(135deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%);
-  max-width: var(--mobile-width);
+  max-width: 100%;
 }
 
 @media screen and (min-width: 768px) {
   #root {
-    max-width: var(--tablet-width);
+    max-width: 100%;
   }
 }
 
+/* html, body 기본 설정은 위에서 이미 정의됨 */
 html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
   background: linear-gradient(135deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%);
   overflow: hidden;
   position: fixed;
@@ -85,16 +95,24 @@ button, a {
   user-select: none;
 }
 
-/* 스크롤바 스타일링 */
+/* 스크롤바 숨기기 (스크롤 기능은 유지) */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 0px;
   background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--primary-blue);
-  border-radius: 3px;
-  opacity: 0.5;
+  background: transparent;
+}
+
+/* Firefox에서 스크롤바 숨기기 */
+* {
+  scrollbar-width: none;
+}
+
+/* IE/Edge에서 스크롤바 숨기기 */
+* {
+  -ms-overflow-style: none;
 }
 
 /* 모바일 입력 필드 최적화 */

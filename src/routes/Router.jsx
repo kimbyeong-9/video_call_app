@@ -146,14 +146,19 @@ const AppRoutes = () => {
   return (
     <>
       {routes}
-      <IncomingCallModal currentUserId={currentUserId} />
+      {currentUserId && <IncomingCallModal currentUserId={currentUserId} />}
     </>
   );
 };
 
 const Router = () => {
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true
+      }}
+    >
       <AppRoutes />
     </BrowserRouter>
   );

@@ -303,22 +303,6 @@ const Live = () => {
   return (
     <LiveWrapper>
       <CategoryTitle>Live</CategoryTitle>
-
-      {/* 디버그 정보 */}
-      {currentUser && (
-        <DebugInfo>
-          <strong>현재 사용자:</strong> {currentUser.nickname} ({currentUser.email})
-          <br />
-          <strong>User ID:</strong> {currentUser.id}
-          <br />
-          <strong>프로필 이미지:</strong> {currentUser.profile_image ? '설정됨' : '미설정'}
-          <br />
-          <strong>전체 앱에서 활동 중인 유저:</strong> {users.length}명
-          <br />
-          <InfoNote>💡 모든 페이지에서 활동 중인 사용자를 표시합니다</InfoNote>
-        </DebugInfo>
-      )}
-
       {users.length === 0 ? (
         <EmptyMessage>
           <EmptyIcon>👥</EmptyIcon>
@@ -335,7 +319,6 @@ const Live = () => {
               <UserInfo>
                 <UserHeader>
                   <Nickname>{user.nickname}</Nickname>
-                  <StatusBadge type={user.statusType}>{user.status}</StatusBadge>
                 </UserHeader>
 
                 <Bio>{user.bio}</Bio>
@@ -381,43 +364,22 @@ const Live = () => {
 };
 
 const LiveWrapper = styled.div`
-  padding: 20px 0;
-  padding-bottom: 70px;
-  background: linear-gradient(135deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%);
+  background: white;
 `;
 
 const CategoryTitle = styled.h1`
-  font-size: 24px;
-  font-weight: 600;
-  margin-bottom: 20px;
-  color: var(--primary-blue);
-  text-shadow: 0 2px 4px rgba(43, 87, 154, 0.1);
+  font-size: 32px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 50%, #FFC371 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 4px 8px rgba(255, 107, 107, 0.3);
+  letter-spacing: 2px;
+  text-align: center;
+  margin-bottom: 10px;
 `;
 
-const DebugInfo = styled.div`
-  background: #f0f8ff;
-  border: 2px solid var(--primary-blue);
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin-bottom: 20px;
-  font-size: 14px;
-  color: var(--text-primary);
-  line-height: 1.6;
-
-  strong {
-    color: var(--primary-blue);
-  }
-`;
-
-const InfoNote = styled.div`
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: rgba(43, 87, 154, 0.1);
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--primary-blue);
-  font-weight: 500;
-`;
 
 const UserList = styled.div`
   display: flex;
@@ -426,23 +388,26 @@ const UserList = styled.div`
 `;
 
 const UserCard = styled.div`
-  background: var(--bg-card);
+  background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 50%, #FFC371 100%);
   border-radius: 20px;
   padding: 20px;
-  box-shadow: 0 4px 20px rgba(43, 87, 154, 0.1);
+  box-shadow: 0 4px 20px rgba(255, 107, 107, 0.3);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.8);
   transition: all 0.3s ease;
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(43, 87, 154, 0.15);
+    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.4);
   }
 `;
 
 const ProfileSection = styled.div`
   position: relative;
   margin-bottom: 16px;
+  background: white;
+  border-radius: 16px;
+  padding: 8px;
 `;
 
 const ProfileImage = styled.img`
@@ -493,14 +458,6 @@ const Nickname = styled.h2`
   color: var(--text-primary);
 `;
 
-const StatusBadge = styled.span`
-  padding: 6px 12px;
-  background-color: #4CAF50;
-  color: white;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 500;
-`;
 
 const Bio = styled.p`
   color: var(--text-secondary);
@@ -578,23 +535,26 @@ const MessageInput = styled.input`
   transition: all 0.2s ease;
 
   &:focus {
-    border-color: var(--primary-blue);
-    box-shadow: 0 0 0 4px var(--accent-blue);
+    border-color: #FF6B6B;
+    box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.3);
   }
 `;
 
 const SendButton = styled.button`
   padding: 12px 24px;
-  background-color: var(--primary-blue);
+  background: linear-gradient(135deg, #FF8E53 0%, #FF6B6B 100%);
   color: white;
   border: none;
   border-radius: 25px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
 
   &:hover {
-    background-color: var(--primary-dark-blue);
+    background: linear-gradient(135deg, #FF9A5A 0%, #FF7A7A 100%);
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+    transform: translateY(-1px);
   }
 
   &:active {

@@ -412,10 +412,12 @@ const Chatting = () => {
     const diffInHours = (now - date) / (1000 * 60 * 60);
     
     if (diffInHours < 24) {
-      // 오늘: 시간:분
-      const hours = date.getHours().toString().padStart(2, '0');
+      // 오늘: 오전/오후 시간:분
+      const hours = date.getHours();
       const minutes = date.getMinutes().toString().padStart(2, '0');
-      return `${hours}:${minutes}`;
+      const ampm = hours >= 12 ? '오후' : '오전';
+      const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+      return `${ampm} ${displayHours}:${minutes}`;
     } else if (diffInHours < 24 * 7) {
       // 이번 주: 요일
       const days = ['일', '월', '화', '수', '목', '금', '토'];
@@ -433,9 +435,11 @@ const Chatting = () => {
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
-    const hours = date.getHours().toString().padStart(2, '0');
+    const hours = date.getHours();
     const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${year}.${month}.${day} ${hours}:${minutes}`;
+    const ampm = hours >= 12 ? '오후' : '오전';
+    const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    return `${year}.${month}.${day} ${ampm} ${displayHours}:${minutes}`;
   };
 
   if (loading) {
@@ -463,7 +467,8 @@ const Chatting = () => {
           messages.map((msg, index) => {
             const isOwn = msg.user_id === currentUser?.id;
             const senderName = msg.sender?.nickname || msg.sender?.email?.split('@')[0] || '익명';
-            const senderImage = msg.sender?.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${senderName}`;
+            // 프로필 이미지가 로드되지 않았으면 로딩 상태 표시
+            const senderImage = msg.sender?.profile_image || (msg.sender ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${senderName}` : null);
 
             // 이전 메시지와 비교하여 같은 분 단위인지 확인
             const prevMsg = index > 0 ? messages[index - 1] : null;
@@ -472,23 +477,43 @@ const Chatting = () => {
               formatTime(prevMsg.created_at) !== formatTime(msg.created_at) ||
               prevMsg.user_id === currentUser?.id
             );
+            
+            // 같은 시간대의 첫 번째 메시지인지 확인 (프로필 이미지와 시간 표시용)
+            const showTimeAndProfile = !isOwn && (!prevMsg ||
+              prevMsg.user_id !== msg.user_id ||
+              formatTime(prevMsg.created_at) !== formatTime(msg.created_at) ||
+              prevMsg.user_id === currentUser?.id
+            );
+            
+            // 내 메시지의 시간 표시 조건 (같은 시간대의 첫 번째 메시지에만)
+            const showMyMessageTime = isOwn && (!prevMsg ||
+              prevMsg.user_id !== msg.user_id ||
+              formatTime(prevMsg.created_at) !== formatTime(msg.created_at) ||
+              prevMsg.user_id !== currentUser?.id
+            );
 
             return (
               <MessageWrapper key={msg.id} $isOwn={isOwn}>
                 {!isOwn && (
                   <MessageGroup>
-                    {showProfile ? (
+                    {showTimeAndProfile ? (
                       <ProfileImageWrapper>
-                        <ProfileImage src={senderImage} alt={senderName} />
+                        {senderImage ? (
+                          <ProfileImage src={senderImage} alt={senderName} />
+                        ) : (
+                          <ProfileImagePlaceholder>
+                            <LoadingSpinner />
+                          </ProfileImagePlaceholder>
+                        )}
                       </ProfileImageWrapper>
                     ) : (
                       <ProfileImagePlaceholder />
                     )}
                     <MessageContent>
-                      {showProfile && <SenderName>{senderName}</SenderName>}
+                      {showTimeAndProfile && <SenderName>{senderName}</SenderName>}
                       <MessageBubble $isOwn={isOwn} title={formatFullTime(msg.created_at)}>
                         <MessageText>{msg.content}</MessageText>
-                        <MessageTime>{formatTime(msg.created_at)}</MessageTime>
+                        {showTimeAndProfile && <MessageTime>{formatTime(msg.created_at)}</MessageTime>}
                       </MessageBubble>
                     </MessageContent>
                   </MessageGroup>
@@ -496,7 +521,7 @@ const Chatting = () => {
                 {isOwn && (
                   <MessageBubble $isOwn={isOwn} title={formatFullTime(msg.created_at)}>
                     <MessageText>{msg.content}</MessageText>
-                    <MessageTime>{formatTime(msg.created_at)}</MessageTime>
+                    {showMyMessageTime && <MessageTime>{formatTime(msg.created_at)}</MessageTime>}
                   </MessageBubble>
                 )}
               </MessageWrapper>
@@ -633,7 +658,27 @@ const ProfileImage = styled.img`
 
 const ProfileImagePlaceholder = styled.div`
   width: 36px;
+  height: 36px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: transparent;
+`;
+
+const LoadingSpinner = styled.div`
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e0e0;
+  border-top: 2px solid #007aff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
 `;
 
 const MessageContent = styled.div`

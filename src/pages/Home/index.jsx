@@ -6,6 +6,7 @@ import { supabase } from '../../utils/supabase';
 import CommentIcon from '../../assets/images/comment_17619813.png';
 import NotificationPopup from '../../components/common/NotificationPopup';
 import { onlineStatusManager } from '../../utils/onlineStatus';
+import { videoCall, WebRTCManager } from '../../utils/webrtc';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -360,6 +361,53 @@ const Home = () => {
     }
   };
 
+  // 영상통화 버튼 클릭
+  const handleVideoCall = async (e, user) => {
+    e.stopPropagation(); // 카드 클릭 이벤트 전파 방지
+    
+    if (!userProfile?.id) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    if (userProfile.id === user.id) {
+      alert('자신에게는 영상통화를 걸 수 없습니다.');
+      return;
+    }
+
+    try {
+      console.log('🔵 Home - 영상통화 시작 요청');
+      console.log('🔵 Home - 발신자 ID:', userProfile.id);
+      console.log('🔵 Home - 수신자:', user.nickname, '/', user.id);
+
+      // 이전 WebRTC 인스턴스가 있다면 정리
+      const existingManager = new WebRTCManager(userProfile.id);
+      existingManager.forceCleanup();
+
+      // 통화 생성
+      const { data: callData, error } = await videoCall.createCall(
+        userProfile.id,
+        user.id
+      );
+
+      if (error) {
+        console.error('❌ Home - 통화 생성 실패:', error);
+        alert(`영상통화를 시작할 수 없습니다: ${error.message}`);
+        return;
+      }
+
+      console.log('✅ Home - 통화 생성 완료!');
+      console.log('✅ Home - Call ID:', callData.id);
+
+      // 영상통화 페이지로 이동 (발신자 모드)
+      navigate(`/video-call?callId=${callData.id}&mode=caller`);
+
+    } catch (error) {
+      console.error('❌ Home - 영상통화 시작 에러:', error);
+      alert(`영상통화 연결에 실패했습니다: ${error.message}`);
+    }
+  };
+
   // 사용자의 온라인 상태 확인
   const getUserOnlineStatus = (userId) => {
     if (userId === userProfile?.id) {
@@ -466,7 +514,7 @@ const Home = () => {
       )}
       <Content>
         {/* 나의 프로필 섹션 */}
-        <MyProfileSection>
+        {/* <MyProfileSection>
           <ProfileCard>
             <ProfileImageContainer>
               <ProfileImage 
@@ -495,9 +543,9 @@ const Home = () => {
               <FiSettings size={16} />
             </EditButton>
           </ProfileCard>
-        </MyProfileSection>
+        </MyProfileSection> */}
 
-        {/* 매칭 시작 버튼 */}
+        {/* 매칭 시작 버튼
         <MatchingSection>
           <StartMatchingButton onClick={handleStartMatching}>
             <RandomIconWrapper>
@@ -526,7 +574,7 @@ const Home = () => {
               <FiVideo size={20} />
             </VideoIconSmall>
           </StartMatchingButton>
-        </MatchingSection>
+        </MatchingSection> */}
 
         {/* 실시간 추천 유저 섹션 */}
         <RecommendedSection>
@@ -593,6 +641,12 @@ const Home = () => {
                           onClick={(e) => handleMessageClick(e, user)}
                         >
                           <FiMessageCircle size={20} />
+                        </ActionButtonLarge>
+                        <ActionButtonLarge 
+                          type="video" 
+                          onClick={(e) => handleVideoCall(e, user)}
+                        >
+                          <FiVideo size={20} />
                         </ActionButtonLarge>
                       </UserActionsLarge>
                     </CardContent>
@@ -819,9 +873,9 @@ const SliderWrapper = styled.div`
 
 const LargeUserCard = styled.div`
   min-width: 100%;
-  height: 500px;
-  border-radius: 24px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  height: 600px;
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -868,10 +922,10 @@ const CardOverlay = styled.div`
   bottom: 0;
   background: linear-gradient(
     to top,
-    rgba(0, 0, 0, 0.9) 0%,
-    rgba(0, 0, 0, 0.7) 25%,
-    rgba(0, 0, 0, 0.4) 50%,
-    rgba(0, 0, 0, 0.2) 75%,
+    rgba(0, 0, 0, 0.5) 0%,
+    rgba(0, 0, 0, 0.3) 25%,
+    rgba(0, 0, 0, 0.2) 50%,
+    rgba(0, 0, 0, 0.1) 75%,
     transparent 100%
   );
   z-index: 1;
@@ -968,6 +1022,9 @@ const ActionButtonLarge = styled.button`
       return props.$isFriend 
         ? 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)' // 친구 추가됨 (초록색)
         : 'linear-gradient(135deg, #FF9800 0%, #FFB74D 100%)'; // 친구 추가 (주황색)
+    }
+    if (props.type === 'video') {
+      return 'linear-gradient(135deg, #E91E63 0%, #F06292 100%)'; // 영상통화 (핑크색)
     }
     return 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)'; // 채팅 (보라색)
   }};

@@ -5,6 +5,34 @@ import { FiCamera, FiX } from 'react-icons/fi';
 import { profile, supabase } from '../../utils/supabase';
 import NotificationPopup from '../../components/common/NotificationPopup';
 
+// 성별 옵션
+const GENDER_OPTIONS = [
+  { value: 'male', label: '남성' },
+  { value: 'female', label: '여성' },
+  { value: 'prefer_not_to_say', label: '선택 안함' },
+];
+
+// 지역 옵션
+const LOCATION_OPTIONS = [
+  { value: 'seoul', label: '서울특별시' },
+  { value: 'busan', label: '부산광역시' },
+  { value: 'daegu', label: '대구광역시' },
+  { value: 'incheon', label: '인천광역시' },
+  { value: 'gwangju', label: '광주광역시' },
+  { value: 'daejeon', label: '대전광역시' },
+  { value: 'ulsan', label: '울산광역시' },
+  { value: 'sejong', label: '세종특별자치시' },
+  { value: 'gyeonggi', label: '경기도' },
+  { value: 'gangwon', label: '강원도' },
+  { value: 'chungbuk', label: '충청북도' },
+  { value: 'chungnam', label: '충청남도' },
+  { value: 'jeonbuk', label: '전라북도' },
+  { value: 'jeonnam', label: '전라남도' },
+  { value: 'gyeongbuk', label: '경상북도' },
+  { value: 'gyeongnam', label: '경상남도' },
+  { value: 'jeju', label: '제주특별자치도' },
+];
+
 // 관심사 키워드 목록
 const INTEREST_KEYWORDS = [
   // 여행
@@ -64,6 +92,8 @@ const EditProfile = () => {
     nickname: '',
     bio: '',
     interests: [], // 관심사 배열
+    gender: '', // 성별
+    location: '', // 사는 지역
   });
 
   const [previewImage, setPreviewImage] = useState('');
@@ -104,11 +134,17 @@ const EditProfile = () => {
       }
 
       if (data) {
+        console.log('🔵 프로필 데이터 로드:', data);
+        console.log('🔵 현재 성별:', data.gender);
+        console.log('🔵 현재 지역:', data.location);
+        
         setFormData({
           profileImage: data.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.nickname || 'user'}`,
           nickname: data.nickname || '',
           bio: data.bio || '',
           interests: data.interests || [],
+          gender: data.gender || '',
+          location: data.location || '',
         });
         setPreviewImage(data.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.nickname || 'user'}`);
       }
@@ -150,6 +186,18 @@ const EditProfile = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // 성별 선택 핸들러
+  const handleGenderChange = (gender) => {
+    console.log('🔵 성별 선택:', gender);
+    setFormData(prev => ({ ...prev, gender }));
+  };
+
+  // 지역 선택 핸들러
+  const handleLocationChange = (location) => {
+    console.log('🔵 지역 선택:', location);
+    setFormData(prev => ({ ...prev, location }));
   };
 
   // 관심사 키워드 토글
@@ -288,14 +336,18 @@ const EditProfile = () => {
         nickname: formData.nickname,
         bio: formData.bio,
         interests: formData.interests,
-        profile_image: profileImageUrl
+        profile_image: profileImageUrl,
+        gender: formData.gender,
+        location: formData.location
       });
 
       const { data, error } = await profile.updateProfile(currentUser.id, {
         nickname: formData.nickname,
         bio: formData.bio,
         interests: formData.interests,
-        profile_image: profileImageUrl
+        profile_image: profileImageUrl,
+        gender: formData.gender,
+        location: formData.location
       });
 
       if (error) {
@@ -304,6 +356,15 @@ const EditProfile = () => {
       }
 
       console.log('✅ 프로필 업데이트 완료:', data);
+
+      // localStorage 업데이트
+      const updatedUser = {
+        id: currentUser.id,
+        email: currentUser.email,
+        nickname: formData.nickname
+      };
+      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      console.log('🔵 localStorage 업데이트 완료:', updatedUser);
 
       // 성공 알림
       setNotification({
@@ -380,6 +441,38 @@ const EditProfile = () => {
           </InputGroup>
 
           <InputGroup>
+            <Label>성별</Label>
+            <GenderButtonGroup>
+              {GENDER_OPTIONS.map((option) => (
+                <GenderButton
+                  key={option.value}
+                  type="button"
+                  isSelected={formData.gender === option.value}
+                  onClick={() => handleGenderChange(option.value)}
+                >
+                  {option.label}
+                </GenderButton>
+              ))}
+            </GenderButtonGroup>
+          </InputGroup>
+
+          <InputGroup>
+            <Label>내 동네</Label>
+            <LocationSelect
+              name="location"
+              value={formData.location}
+              onChange={(e) => handleLocationChange(e.target.value)}
+            >
+              <option value="">지역을 선택해주세요</option>
+              {LOCATION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </LocationSelect>
+          </InputGroup>
+
+          <InputGroup>
             <LabelWrapper>
               <Label>관심사 키워드 선택 (최대 5개)</Label>
               <SelectedCount isMax={formData.interests.length >= 5}>
@@ -440,22 +533,6 @@ const EditProfile = () => {
                   </CustomInputGroup>
                 </CustomInputBox>
               </CustomInputWrapper>
-            )}
-            
-            {formData.interests.length > 0 && (
-              <>
-                <SelectedLabel>선택된 관심사:</SelectedLabel>
-                <SelectedInterestList>
-                  {formData.interests.map((interest, index) => (
-                    <SelectedInterestTag key={index}>
-                      {interest}
-                      <RemoveButton onClick={() => handleToggleInterest(interest)}>
-                        <FiX size={14} />
-                      </RemoveButton>
-                    </SelectedInterestTag>
-                  ))}
-                </SelectedInterestList>
-              </>
             )}
           </InputGroup>
         </InputSection>
@@ -801,50 +878,6 @@ const CustomCancelButton = styled.button`
   }
 `;
 
-const SelectedLabel = styled.p`
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-`;
-
-const SelectedInterestList = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px;
-  background-color: var(--accent-blue);
-  border-radius: 12px;
-`;
-
-const SelectedInterestTag = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background-color: var(--primary-blue);
-  border-radius: 16px;
-  font-size: 13px;
-  color: white;
-  font-weight: 500;
-`;
-
-const RemoveButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: white;
-  cursor: pointer;
-  padding: 0;
-  transition: all 0.2s ease;
-
-  &:hover {
-    transform: scale(1.2);
-  }
-`;
-
 const LoadingOverlay = styled.div`
   position: fixed;
   top: 0;
@@ -879,6 +912,67 @@ const LoadingText = styled.p`
   margin-top: 16px;
   font-size: 16px;
   font-weight: 500;
+`;
+
+// 성별 선택 스타일
+const GenderButtonGroup = styled.div`
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+`;
+
+const GenderButton = styled.button.withConfig({
+  shouldForwardProp: (prop) => prop !== 'isSelected',
+})`
+  padding: 10px 16px;
+  background-color: ${props => props.isSelected ? 'var(--primary-blue)' : 'white'};
+  color: ${props => props.isSelected ? 'white' : 'var(--text-primary)'};
+  border: 2px solid ${props => props.isSelected ? 'var(--primary-blue)' : 'var(--primary-light-blue)'};
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: ${props => props.isSelected ? '600' : '400'};
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(43, 87, 154, 0.1);
+
+  &:hover {
+    background-color: ${props => props.isSelected ? 'var(--primary-dark-blue)' : 'var(--accent-blue)'};
+    border-color: var(--primary-blue);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(43, 87, 154, 0.2);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+// 지역 선택 스타일
+const LocationSelect = styled.select`
+  padding: 12px 16px;
+  border: 2px solid var(--primary-light-blue);
+  border-radius: 12px;
+  font-size: 16px;
+  color: var(--text-primary);
+  background: white;
+  box-shadow: 0 2px 8px rgba(43, 87, 154, 0.1);
+  transition: all 0.2s ease;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 4px 12px rgba(43, 87, 154, 0.2);
+  }
+
+  option {
+    padding: 8px;
+    color: var(--text-primary);
+  }
+
+  option:first-child {
+    color: var(--text-light);
+  }
 `;
 
 export default EditProfile;

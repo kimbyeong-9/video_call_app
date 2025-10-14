@@ -16,6 +16,7 @@ const Mypage = () => {
   const loadUserProfile = async () => {
     try {
       console.log('🔵 Mypage - 사용자 프로필 로드 시작');
+      setLoading(true);
       
       // 현재 Supabase Auth 세션 확인
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -43,6 +44,8 @@ const Mypage = () => {
         .single();
 
       console.log('🔵 Mypage - Supabase 응답:', { profileData, profileError });
+      console.log('🔵 Mypage - Gender:', profileData?.gender);
+      console.log('🔵 Mypage - Location:', profileData?.location);
 
       if (profileError) {
         console.error('❌ Mypage - 프로필 로드 오류:', profileError);
@@ -55,6 +58,8 @@ const Mypage = () => {
           profile_image: session.user.user_metadata?.avatar_url || null,
           bio: null,
           interests: [],
+          gender: null,
+          location: null,
           created_at: session.user.created_at || new Date().toISOString()
         };
         
@@ -132,6 +137,40 @@ const Mypage = () => {
     });
   };
 
+  // 성별 값을 한국어로 변환
+  const getGenderLabel = (gender) => {
+    const genderMap = {
+      'male': '남성',
+      'female': '여성',
+      'prefer_not_to_say': '선택 안함'
+    };
+    return genderMap[gender] || gender;
+  };
+
+  // 지역 값을 한국어로 변환
+  const getLocationLabel = (location) => {
+    const locationMap = {
+      'seoul': '서울특별시',
+      'busan': '부산광역시',
+      'daegu': '대구광역시',
+      'incheon': '인천광역시',
+      'gwangju': '광주광역시',
+      'daejeon': '대전광역시',
+      'ulsan': '울산광역시',
+      'sejong': '세종특별자치시',
+      'gyeonggi': '경기도',
+      'gangwon': '강원도',
+      'chungbuk': '충청북도',
+      'chungnam': '충청남도',
+      'jeonbuk': '전라북도',
+      'jeonnam': '전라남도',
+      'gyeongbuk': '경상북도',
+      'gyeongnam': '경상남도',
+      'jeju': '제주특별자치도'
+    };
+    return locationMap[location] || location;
+  };
+
   return (
     <ProfileWrapper>
       <Header>
@@ -150,6 +189,22 @@ const Mypage = () => {
         <ProfileInfo>
           <Nickname>{userProfile.nickname || '닉네임 없음'}</Nickname>
           <Bio>{userProfile.bio || '소개가 없습니다.'}</Bio>
+          
+          {/* 성별과 지역 정보 */}
+          <ProfileDetails>
+            {userProfile.gender && (
+              <DetailItem>
+                <DetailLabel>성별</DetailLabel>
+                <DetailValue>{getGenderLabel(userProfile.gender)}</DetailValue>
+              </DetailItem>
+            )}
+            {userProfile.location && (
+              <DetailItem>
+                <DetailLabel>내 동네</DetailLabel>
+                <DetailValue>{getLocationLabel(userProfile.location)}</DetailValue>
+              </DetailItem>
+            )}
+          </ProfileDetails>
         </ProfileInfo>
 
         {interests.length > 0 && (
@@ -158,7 +213,6 @@ const Mypage = () => {
             <InterestsList>
               {interests.map((interest, index) => (
                 <InterestItem key={index}>
-                  <InterestIcon>🏷️</InterestIcon>
                   <InterestName>{interest}</InterestName>
                 </InterestItem>
               ))}
@@ -166,14 +220,8 @@ const Mypage = () => {
           </InterestsSection>
         )}
 
-        <SettingsSection>
-          <SettingButton onClick={() => navigate('/settings')}>
-            <SettingIcon>⚙️</SettingIcon>
-            <span>설정</span>
-          </SettingButton>
-        </SettingsSection>
 
-        <ProfileDetails>
+        <AccountDetails>
           <DetailItem>
             <DetailLabel>이메일</DetailLabel>
             <DetailValue>{userProfile.email}</DetailValue>
@@ -182,7 +230,7 @@ const Mypage = () => {
             <DetailLabel>가입일</DetailLabel>
             <DetailValue>{formatDate(userProfile.created_at)}</DetailValue>
           </DetailItem>
-        </ProfileDetails>
+        </AccountDetails>
       </ProfileContent>
     </ProfileWrapper>
   );
@@ -309,66 +357,50 @@ const InterestItem = styled.div`
   }
 `;
 
-const InterestIcon = styled.span`
-  font-size: 18px;
-`;
-
 const InterestName = styled.span`
   font-size: 14px;
   color: var(--primary-blue);
   font-weight: 500;
 `;
 
-const SettingsSection = styled.div`
-  margin-bottom: 24px;
-  border-top: 1px solid var(--primary-light-blue);
-  padding-top: 24px;
-`;
-
-const SettingButton = styled.button`
-  width: 100%;
-  padding: 12px;
-  background-color: var(--accent-blue);
-  border: none;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  color: var(--primary-blue);
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    background-color: var(--primary-light-blue);
-  }
-`;
-
-const SettingIcon = styled.span`
-  font-size: 20px;
-`;
-
+// 프로필 상세 정보 (성별, 지역)
 const ProfileDetails = styled.div`
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  background-color: var(--accent-blue);
+  border-radius: 12px;
+`;
+
+// 계정 정보 (이메일, 가입일)
+const AccountDetails = styled.div`
+  display: flex;
+  flex-direction: column;
   gap: 16px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--primary-light-blue);
 `;
 
 const DetailItem = styled.div`
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
 `;
 
 const DetailLabel = styled.span`
   font-size: 14px;
   color: var(--text-light);
+  min-width: 40px;
 `;
 
 const DetailValue = styled.span`
   font-size: 14px;
   color: var(--text-secondary);
   font-weight: 500;
+  flex: 1;
 `;
 
 const LoadingMessage = styled.div`

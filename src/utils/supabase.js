@@ -296,7 +296,9 @@ export const profile = {
         nickname: profileData.nickname,
         bio: profileData.bio,
         interests: profileData.interests,
-        profile_image: profileData.profile_image
+        profile_image: profileData.profile_image,
+        gender: profileData.gender,
+        location: profileData.location
       };
       
       console.log('🔵 업데이트할 데이터:', updateData);

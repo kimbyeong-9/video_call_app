@@ -2,6 +2,8 @@ import React from 'react';
 import styled from 'styled-components';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useUnreadMessages } from '../../contexts/UnreadMessagesContext';
+import HouseIcon from '../../assets/images/house_17996174.png';
+import PersonIcon from '../../assets/images/person_6797008.png';
 
 const Footer = () => {
   const navigate = useNavigate();
@@ -9,8 +11,8 @@ const Footer = () => {
   const { unreadCount } = useUnreadMessages();
 
   const tabs = [
-    { path: '/', label: '홈', icon: '🏠' },
-    { path: '/friends', label: '친구목록', icon: '👥' },
+    { path: '/', label: '홈', icon: 'house', isImage: true },
+    { path: '/friends', label: '친구목록', icon: 'person', isImage: true },
     { path: '/chatlist', label: '채팅', icon: '💬', showBadge: true },
     { path: '/search', label: '검색', icon: '🔍' },
     { path: '/live', label: 'Live', icon: '📹' }
@@ -26,7 +28,15 @@ const Footer = () => {
             onClick={() => navigate(tab.path)}
           >
             <IconWrapper>
-              <TabIcon>{tab.icon}</TabIcon>
+              {tab.isImage ? (
+                tab.icon === 'house' ? (
+                  <HouseImage src={HouseIcon} alt="홈" />
+                ) : (
+                  <PersonImage src={PersonIcon} alt="친구목록" />
+                )
+              ) : (
+                <TabIcon>{tab.icon}</TabIcon>
+              )}
               {tab.showBadge && unreadCount > 0 && (
                 <NotificationBadge>{unreadCount > 99 ? '99+' : unreadCount}</NotificationBadge>
               )}
@@ -92,6 +102,20 @@ const IconWrapper = styled.div`
 
 const TabIcon = styled.span`
   font-size: 20px;
+  margin-bottom: 2px;
+`;
+
+const HouseImage = styled.img`
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  margin-bottom: 2px;
+`;
+
+const PersonImage = styled.img`
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
   margin-bottom: 2px;
 `;
 

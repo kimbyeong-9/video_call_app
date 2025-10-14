@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiBell, FiSettings, FiLogOut, FiFileText, FiShield } from 'react-icons/fi';
 import LogoImage from '../../assets/images/logo/travo_logo.png';
+import MenuIcon from '../../assets/images/list_14052418.png';
 import { supabase } from '../../utils/supabase';
 import NotificationPopup from './NotificationPopup';
 
@@ -106,7 +107,7 @@ const Header = () => {
         <SettingsWrapper ref={settingsRef}>
           <IconButton onClick={() => setShowSettingsMenu(!showSettingsMenu)}>
             <SettingsIcon>
-              <FiSettings size={20} />
+              <MenuImage src={MenuIcon} alt="메뉴" />
             </SettingsIcon>
           </IconButton>
           {showSettingsMenu && (
@@ -205,6 +206,12 @@ const SettingsIcon = styled.span`
   display: flex;
   align-items: center;
   justify-content: center;
+`;
+
+const MenuImage = styled.img`
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 `;
 
 const NotificationBadge = styled.div`

@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { FiVideo, FiMessageCircle, FiSettings, FiStar, FiShuffle, FiZap, FiUserPlus, FiUserCheck } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
+import CommentIcon from '../../assets/images/comment_17619813.png';
 import NotificationPopup from '../../components/common/NotificationPopup';
 import { onlineStatusManager } from '../../utils/onlineStatus';
 
@@ -531,7 +532,7 @@ const Home = () => {
         <RecommendedSection>
           <SectionHeader>
             <SectionTitle>
-              <FiStar size={20} />
+              <CommentImage src={CommentIcon} alt="댓글" />
               실시간 추천
             </SectionTitle>
             <SectionSubtitle>지금 활성화된 사용자들과 만나보세요</SectionSubtitle>
@@ -779,6 +780,12 @@ const SectionTitle = styled.h2`
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 8px 0;
+`;
+
+const CommentImage = styled.img`
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
 `;
 
 const SectionSubtitle = styled.p`

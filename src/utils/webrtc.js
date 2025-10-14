@@ -500,6 +500,12 @@ export class WebRTCManager {
   initPeerConnection(onRemoteStream, onConnectionStateChange) {
     console.log('🔵 [WebRTC] PeerConnection 초기화 시작');
     
+    // 기존 PeerConnection이 있다면 정리
+    if (this.peerConnection) {
+      console.log('🔵 [WebRTC] 기존 PeerConnection 정리');
+      this.peerConnection.close();
+    }
+    
     this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
 
     // 로컬 스트림 추가
@@ -633,6 +639,13 @@ export class WebRTCManager {
       console.log('🔵 [WebRTC] PeerConnection 현재 상태:', this.peerConnection.signalingState);
       console.log('🔵 [WebRTC] Remote Answer 수신:', answerSdp.type);
 
+      // 이미 remoteDescription이 설정되어 있다면 중복 처리 방지
+      if (this.peerConnection.remoteDescription) {
+        console.warn('⚠️ [WebRTC] Answer 무시 - 이미 remoteDescription이 설정됨');
+        console.warn('   현재 상태:', this.peerConnection.signalingState);
+        return;
+      }
+
       // Answer는 'have-local-offer' 상태에서만 처리 가능
       if (this.peerConnection.signalingState !== 'have-local-offer') {
         console.warn('⚠️ [WebRTC] Answer 무시 - 잘못된 상태:', this.peerConnection.signalingState);
@@ -652,7 +665,16 @@ export class WebRTCManager {
     } catch (error) {
       console.error('❌ [WebRTC] Answer 처리 실패:', error);
       console.error('   상태:', this.peerConnection.signalingState);
-      // 에러를 throw하지 않고 로그만 남김 (이미 처리된 Answer일 수 있음)
+      console.error('   remoteDescription 존재:', !!this.peerConnection.remoteDescription);
+      
+      // 이미 처리된 Answer인 경우 무시
+      if (error.name === 'InvalidStateError' && this.peerConnection.remoteDescription) {
+        console.warn('⚠️ [WebRTC] 이미 처리된 Answer - 무시');
+        return;
+      }
+      
+      // 다른 에러는 다시 throw
+      throw error;
     }
   }
 
@@ -799,6 +821,7 @@ export class WebRTCManager {
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           console.log('✅ [WebRTC.onAnswer] Answer 수신!');
           console.log('   Answer SDP:', answerSdp);
+          console.log('   현재 상태:', this.peerConnection?.signalingState);
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
           try {
@@ -807,6 +830,8 @@ export class WebRTCManager {
             console.log('✅ [WebRTC.onAnswer] Answer 처리 완료 - 연결 시작!');
           } catch (error) {
             console.error('❌ [WebRTC.onAnswer] Answer 처리 실패:', error);
+            // 에러가 발생해도 콜백은 호출 (UI 업데이트를 위해)
+            callbacks.onAnswer?.(answerSdp);
           }
         },
         onIceCandidate: async (candidate) => {
@@ -840,7 +865,7 @@ export class WebRTCManager {
     console.log('🔵 [WebRTCManager] cleanup 시작');
 
     // ICE Candidate 큐 비우기
-    if (this.pendingIceCandidates.length > 0) {
+    if (this.pendingIceCandidates && this.pendingIceCandidates.length > 0) {
       console.log(`🔵 [WebRTCManager] ICE Candidate 큐 비우기: ${this.pendingIceCandidates.length}개`);
       this.pendingIceCandidates = [];
     }
@@ -848,13 +873,24 @@ export class WebRTCManager {
     // 로컬 스트림 중지
     if (this.localStream) {
       console.log('🔵 [WebRTCManager] 로컬 스트림 중지');
-      this.localStream.getTracks().forEach(track => track.stop());
+      this.localStream.getTracks().forEach(track => {
+        track.stop();
+        console.log('🔵 [WebRTCManager] Track 중지:', track.kind);
+      });
       this.localStream = null;
+    }
+
+    // 원격 스트림 정리
+    if (this.remoteStream) {
+      console.log('🔵 [WebRTCManager] 원격 스트림 정리');
+      this.remoteStream.getTracks().forEach(track => track.stop());
+      this.remoteStream = null;
     }
 
     // PeerConnection 종료
     if (this.peerConnection) {
       console.log('🔵 [WebRTCManager] PeerConnection 종료');
+      console.log('   현재 상태:', this.peerConnection.connectionState);
       this.peerConnection.close();
       this.peerConnection = null;
     }
@@ -862,14 +898,22 @@ export class WebRTCManager {
     // 시그널링 구독 해제 (Realtime)
     if (this.signalChannel) {
       console.log('🔵 [WebRTCManager] 시그널링 구독 해제');
-      await supabase.removeChannel(this.signalChannel);
+      try {
+        await supabase.removeChannel(this.signalChannel);
+      } catch (error) {
+        console.warn('⚠️ [WebRTCManager] 시그널링 구독 해제 실패:', error);
+      }
       this.signalChannel = null;
     }
 
     // 상태 구독 해제
     if (this.statusChannel) {
       console.log('🔵 [WebRTCManager] 상태 구독 해제');
-      await supabase.removeChannel(this.statusChannel);
+      try {
+        await supabase.removeChannel(this.statusChannel);
+      } catch (error) {
+        console.warn('⚠️ [WebRTCManager] 상태 구독 해제 실패:', error);
+      }
       this.statusChannel = null;
     }
 

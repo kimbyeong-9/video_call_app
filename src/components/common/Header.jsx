@@ -1,27 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { FiBell, FiSettings, FiLogOut, FiFileText, FiShield } from 'react-icons/fi';
+import { FiSettings, FiLogOut, FiFileText, FiShield } from 'react-icons/fi';
 import LogoImage from '../../assets/images/logo/travo_logo.png';
 import MenuIcon from '../../assets/images/list_14052418.png';
 import { supabase } from '../../utils/supabase';
-import NotificationPopup from './NotificationPopup';
 
 const Header = () => {
   const navigate = useNavigate();
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
-  const notificationRef = useRef(null);
   const settingsRef = useRef(null);
 
   useEffect(() => {
     loadUserProfile();
     
     const handleClickOutside = (event) => {
-      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
-        setShowNotifications(false);
-      }
       if (settingsRef.current && !settingsRef.current.contains(event.target)) {
         setShowSettingsMenu(false);
       }
@@ -93,17 +87,6 @@ const Header = () => {
       </LogoSection>
 
       <IconSection>
-        <NotificationWrapper ref={notificationRef}>
-          <IconButton onClick={() => setShowNotifications(!showNotifications)}>
-            <NotificationIcon>
-              <FiBell size={20} />
-            </NotificationIcon>
-            <NotificationBadge />
-          </IconButton>
-          {showNotifications && (
-            <NotificationPopup onClose={() => setShowNotifications(false)} />
-          )}
-        </NotificationWrapper>
         <SettingsWrapper ref={settingsRef}>
           <IconButton onClick={() => setShowSettingsMenu(!showSettingsMenu)}>
             <SettingsIcon>
@@ -176,9 +159,6 @@ const IconSection = styled.div`
   align-items: center;
 `;
 
-const NotificationWrapper = styled.div`
-  position: relative;
-`;
 
 const IconButton = styled.button`
   background: none;
@@ -196,11 +176,6 @@ const IconButton = styled.button`
   }
 `;
 
-const NotificationIcon = styled.span`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
 
 const SettingsIcon = styled.span`
   display: flex;
@@ -214,15 +189,6 @@ const MenuImage = styled.img`
   object-fit: contain;
 `;
 
-const NotificationBadge = styled.div`
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  background-color: #FF3B30;
-  border-radius: 50%;
-`;
 
 const SettingsWrapper = styled.div`
   position: relative;

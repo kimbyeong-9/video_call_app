@@ -6,7 +6,6 @@ import HouseIcon from '../../assets/images/house_17996174.png';
 import PersonIcon from '../../assets/images/person_6797008.png';
 import DialogueIcon from '../../assets/images/dialogue-bubble_17603703.png';
 import SearchIcon from '../../assets/images/search_18292397.png';
-import LiveIcon from '../../assets/images/live-streaming_13013234.png';
 
 const Footer = () => {
   const navigate = useNavigate();
@@ -17,8 +16,7 @@ const Footer = () => {
     { path: '/', label: '홈', icon: 'house', isImage: true },
     { path: '/friends', label: '친구목록', icon: 'person', isImage: true },
     { path: '/chatlist', label: '채팅', icon: 'dialogue', isImage: true, showBadge: true },
-    { path: '/search', label: '검색', icon: 'search', isImage: true },
-    { path: '/live', label: 'Live', icon: 'live', isImage: true }
+    { path: '/search', label: '검색', icon: 'search', isImage: true }
   ];
 
   return (
@@ -38,10 +36,8 @@ const Footer = () => {
                   <PersonImage src={PersonIcon} alt="친구목록" />
                 ) : tab.icon === 'dialogue' ? (
                   <DialogueImage src={DialogueIcon} alt="채팅" />
-                ) : tab.icon === 'search' ? (
-                  <SearchImage src={SearchIcon} alt="검색" />
                 ) : (
-                  <LiveImage src={LiveIcon} alt="Live" />
+                  <SearchImage src={SearchIcon} alt="검색" />
                 )
               ) : (
                 <TabIcon>{tab.icon}</TabIcon>
@@ -136,12 +132,6 @@ const SearchImage = styled.img`
   margin-bottom: 2px;
 `;
 
-const LiveImage = styled.img`
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-  margin-bottom: 2px;
-`;
 
 const NotificationBadge = styled.div`
   position: absolute;

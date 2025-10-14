@@ -2,19 +2,57 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../utils/supabase';
-import { FiMessageCircle, FiHeart } from 'react-icons/fi';
+import { FiMessageCircle } from 'react-icons/fi';
 
 const UserProfile = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
   const [userData, setUserData] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
-  const [isLiked, setIsLiked] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadUserProfile();
   }, [userId]);
+
+  // 성별 데이터를 한국어로 변환하는 헬퍼 함수
+  const getGenderLabel = (gender) => {
+    if (!gender) return null;
+    
+    const genderMap = {
+      'male': '남성',
+      'female': '여성',
+      'prefer_not_to_say': '선택 안함'
+    };
+    
+    return genderMap[gender] || null;
+  };
+
+  // 지역 데이터를 한국어로 변환하는 헬퍼 함수
+  const getLocationLabel = (location) => {
+    if (!location) return null;
+    
+    const locationMap = {
+      'seoul': '서울',
+      'busan': '부산',
+      'daegu': '대구',
+      'incheon': '인천',
+      'gwangju': '광주',
+      'daejeon': '대전',
+      'ulsan': '울산',
+      'gyeonggi': '경기',
+      'gangwon': '강원',
+      'chungbuk': '충북',
+      'chungnam': '충남',
+      'jeonbuk': '전북',
+      'jeonnam': '전남',
+      'gyeongbuk': '경북',
+      'gyeongnam': '경남',
+      'jeju': '제주'
+    };
+    
+    return locationMap[location] || null;
+  };
 
   const loadUserProfile = async () => {
     try {
@@ -41,6 +79,10 @@ const UserProfile = () => {
         console.error('UserProfile - 사용자를 찾을 수 없음');
         return;
       }
+
+      console.log('🔵 UserProfile - 사용자 데이터 로드:', profileUser);
+      console.log('🔵 UserProfile - Gender:', profileUser.gender);
+      console.log('🔵 UserProfile - Location:', profileUser.location);
 
       setUserData(profileUser);
     } catch (error) {
@@ -184,13 +226,6 @@ const UserProfile = () => {
             <FiMessageCircle size={20} />
             <span>메시지</span>
           </ActionButton>
-          <ActionButton
-            $isLiked={isLiked}
-            onClick={() => setIsLiked(!isLiked)}
-          >
-            <FiHeart size={20} />
-            <span>{isLiked ? '관심 해제' : '관심 추가'}</span>
-          </ActionButton>
         </ActionButtons>
 
         {userData.interests && userData.interests.length > 0 && (
@@ -212,6 +247,18 @@ const UserProfile = () => {
         )}
 
         <ProfileDetails>
+          {getGenderLabel(userData.gender) && (
+            <DetailItem>
+              <DetailLabel>성별</DetailLabel>
+              <DetailValue>{getGenderLabel(userData.gender)}</DetailValue>
+            </DetailItem>
+          )}
+          {getLocationLabel(userData.location) && (
+            <DetailItem>
+              <DetailLabel>내 동네</DetailLabel>
+              <DetailValue>{getLocationLabel(userData.location)}</DetailValue>
+            </DetailItem>
+          )}
           <DetailItem>
             <DetailLabel>이메일</DetailLabel>
             <DetailValue>{userData.email}</DetailValue>
@@ -237,6 +284,7 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+  padding: 0 20px;
 `;
 
 const HeaderTitle = styled.h1`
@@ -315,7 +363,7 @@ const ActionButton = styled.button`
   padding: 12px;
   border-radius: 12px;
   border: none;
-  background-color: ${props => props.$isLiked ? 'var(--primary-light-blue)' : 'var(--accent-blue)'};
+  background-color: var(--accent-blue);
   color: var(--primary-blue);
   font-size: 16px;
   font-weight: 500;
@@ -323,8 +371,7 @@ const ActionButton = styled.button`
   transition: all 0.2s ease;
 
   svg {
-    color: ${props => props.$isLiked ? 'var(--primary-dark-blue)' : 'var(--primary-blue)'};
-    fill: ${props => props.$isLiked ? 'var(--primary-dark-blue)' : 'transparent'};
+    color: var(--primary-blue);
   }
 
   &:hover {

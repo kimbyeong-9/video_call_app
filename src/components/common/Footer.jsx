@@ -62,19 +62,13 @@ const Footer = () => {
 
 const FooterWrapper = styled.footer`
   width: 100%;
-  max-width: var(--mobile-width);
   height: 60px;
   background-color: #ffffff;
   border-top: 1px solid #f0f0f0;
   position: fixed;
   bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
   z-index: 100;
-
-  @media screen and (min-width: 768px) {
-    max-width: var(--tablet-width);
-  }
 `;
 
 const TabsContainer = styled.div`

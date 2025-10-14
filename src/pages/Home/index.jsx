@@ -62,7 +62,7 @@ const Home = () => {
     }
   }, []);
 
-  // 온라인 상태 관리
+  // 온라인 상태 관리 및 실시간 추천 유저 업데이트
   useEffect(() => {
     if (!userProfile?.id) return;
 
@@ -74,9 +74,30 @@ const Home = () => {
         await onlineStatusManager.initialize(userProfile.id);
         
         // 온라인 상태 변경 구독
-        unsubscribeStatusChange = onlineStatusManager.onStatusChange((statusEntries) => {
+        unsubscribeStatusChange = onlineStatusManager.onStatusChange(async (statusEntries) => {
           const newOnlineUsers = new Map(statusEntries);
           setOnlineUsers(newOnlineUsers);
+
+          // 실시간으로 추천 유저 목록 업데이트
+          const onlineUserIds = statusEntries
+            .filter(([_userId, status]) => status.is_online)
+            .map(([userId, _status]) => userId)
+            .filter(userId => userId !== userProfile.id); // 현재 사용자 제외
+
+          if (onlineUserIds.length > 0) {
+            // Supabase에서 온라인 유저들의 프로필 정보 가져오기
+            const { data: users, error: usersError } = await supabase
+              .from('users')
+              .select('*')
+              .in('id', onlineUserIds)
+              .limit(6);
+
+            if (users && !usersError) {
+              setRecommendedUsers(users);
+            }
+          } else {
+            setRecommendedUsers([]);
+          }
         });
       } catch (error) {
         console.error('❌ 온라인 상태 초기화 오류:', error);
@@ -128,15 +149,34 @@ const Home = () => {
         setUserProfile(profileData);
       }
 
-      // 추천 사용자들 가져오기 (현재 사용자 제외)
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('*')
-        .neq('id', session.user.id)
-        .limit(6);
+      // 실시간 활동중인 사용자들만 가져오기 (현재 사용자 제외)
+      const { data: onlineUsers, error: onlineError } = await supabase
+        .from('user_online_status')
+        .select('user_id')
+        .eq('is_online', true);
 
-      if (users && !usersError) {
-        setRecommendedUsers(users);
+      if (onlineUsers && !onlineError && onlineUsers.length > 0) {
+        // 온라인 유저 ID 목록 추출
+        const onlineUserIds = onlineUsers
+          .map(status => status.user_id)
+          .filter(userId => userId !== session.user.id); // 현재 사용자 제외
+
+        if (onlineUserIds.length > 0) {
+          // 온라인 유저들의 프로필 정보 가져오기
+          const { data: users, error: usersError } = await supabase
+            .from('users')
+            .select('*')
+            .in('id', onlineUserIds)
+            .limit(6);
+
+          if (users && !usersError) {
+            setRecommendedUsers(users);
+          }
+        } else {
+          setRecommendedUsers([]);
+        }
+      } else {
+        setRecommendedUsers([]);
       }
       
     } catch (error) {
@@ -420,12 +460,12 @@ const Home = () => {
           <SectionHeader>
             <SectionTitle>
               <CommentImage src={CommentIcon} alt="댓글" />
-              실시간 추천
+              실시간 활동중인 사용자
             </SectionTitle>
-            <SectionSubtitle>지금 활성화된 사용자들과 만나보세요</SectionSubtitle>
+            <SectionSubtitle>지금 온라인인 사용자들과 만나보세요</SectionSubtitle>
           </SectionHeader>
 
-          {recommendedUsers.length > 0 && (
+          {recommendedUsers.length > 0 ? (
             <VerticalScrollContainer>
               {recommendedUsers.map((user, index) => (
                 <LargeUserCard
@@ -478,6 +518,12 @@ const Home = () => {
                 </LargeUserCard>
               ))}
             </VerticalScrollContainer>
+          ) : (
+            <EmptyStateContainer>
+              <EmptyStateIcon>👥</EmptyStateIcon>
+              <EmptyStateText>현재 온라인인 사용자가 없습니다.</EmptyStateText>
+              <EmptyStateSubtext>잠시 후 다시 확인해보세요!</EmptyStateSubtext>
+            </EmptyStateContainer>
           )}
         </RecommendedSection>
       </Content>
@@ -752,6 +798,39 @@ const ActionButtonLarge = styled.button`
   &:active {
     transform: scale(1.05) translateY(0);
   }
+`;
+
+// 빈 상태 스타일
+const EmptyStateContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+`;
+
+const EmptyStateIcon = styled.div`
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.7;
+`;
+
+const EmptyStateText = styled.p`
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+`;
+
+const EmptyStateSubtext = styled.p`
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
 `;
 
 

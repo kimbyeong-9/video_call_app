@@ -199,6 +199,7 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+  padding: 0 20px;
 `;
 
 const HeaderTitle = styled.h1`

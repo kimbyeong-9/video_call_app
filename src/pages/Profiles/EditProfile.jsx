@@ -490,6 +490,7 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+  padding: 0 20px;
 `;
 
 const HeaderTitle = styled.h1`
@@ -583,31 +584,45 @@ const Label = styled.label`
 
 const Input = styled.input`
   padding: 12px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border: 2px solid var(--primary-light-blue);
+  border-radius: 12px;
   font-size: 16px;
   color: var(--text-primary);
-  background: var(--bg-input);
+  background: white;
+  box-shadow: 0 2px 8px rgba(43, 87, 154, 0.1);
+  transition: all 0.2s ease;
 
   &:focus {
     outline: none;
     border-color: var(--primary-blue);
+    box-shadow: 0 4px 12px rgba(43, 87, 154, 0.2);
+  }
+
+  &::placeholder {
+    color: var(--text-light);
   }
 `;
 
 const TextArea = styled.textarea`
   padding: 12px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border: 2px solid var(--primary-light-blue);
+  border-radius: 12px;
   font-size: 16px;
   color: var(--text-primary);
-  background: var(--bg-input);
+  background: white;
   min-height: 100px;
   resize: vertical;
+  box-shadow: 0 2px 8px rgba(43, 87, 154, 0.1);
+  transition: all 0.2s ease;
 
   &:focus {
     outline: none;
     border-color: var(--primary-blue);
+    box-shadow: 0 4px 12px rgba(43, 87, 154, 0.2);
+  }
+
+  &::placeholder {
+    color: var(--text-light);
   }
 `;
 
@@ -618,7 +633,9 @@ const LabelWrapper = styled.div`
   margin-bottom: 12px;
 `;
 
-const SelectedCount = styled.span`
+const SelectedCount = styled.span.withConfig({
+  shouldForwardProp: (prop) => prop !== 'isMax',
+})`
   font-size: 14px;
   font-weight: 600;
   color: ${props => props.isMax ? '#ff4444' : 'var(--primary-blue)'};

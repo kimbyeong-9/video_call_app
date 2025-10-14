@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { FiVideo, FiMessageCircle, FiSettings, FiStar, FiChevronLeft, FiChevronRight, FiShuffle, FiZap, FiUserPlus, FiUserCheck } from 'react-icons/fi';
+import { FiVideo, FiMessageCircle, FiSettings, FiStar, FiShuffle, FiZap, FiUserPlus, FiUserCheck } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
 import NotificationPopup from '../../components/common/NotificationPopup';
 import { onlineStatusManager } from '../../utils/onlineStatus';
@@ -599,23 +599,6 @@ const Home = () => {
                 ))}
               </SliderWrapper>
 
-              <NavigationButtons>
-                <NavButton onClick={handlePrevUser}>
-                  <FiChevronLeft size={24} />
-                </NavButton>
-                <PaginationDots>
-                  {recommendedUsers.map((_, index) => (
-                    <Dot
-                      key={index}
-                      $active={index === currentIndex}
-                      onClick={() => setCurrentIndex(index)}
-                    />
-                  ))}
-                </PaginationDots>
-                <NavButton onClick={handleNextUser}>
-                  <FiChevronRight size={24} />
-                </NavButton>
-              </NavigationButtons>
             </SliderContainer>
           )}
         </RecommendedSection>
@@ -1006,57 +989,6 @@ const ActionButtonLarge = styled.button`
   }
 `;
 
-const NavigationButtons = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 20px;
-  padding: 0 20px;
-`;
-
-const NavButton = styled.button`
-  background: white;
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  color: var(--primary-blue);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-
-  &:hover {
-    background: var(--accent-blue);
-    transform: scale(1.05);
-  }
-
-  &:active {
-    transform: scale(0.95);
-  }
-`;
-
-const PaginationDots = styled.div`
-  display: flex;
-  gap: 8px;
-`;
-
-const Dot = styled.button`
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: none;
-  background-color: ${props => props.$active ? 'var(--primary-blue)' : '#e5e7eb'};
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    background-color: var(--primary-blue);
-    transform: scale(1.2);
-  }
-`;
 
 // 매칭 섹션
 const MatchingSection = styled.div`

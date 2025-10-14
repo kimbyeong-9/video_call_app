@@ -18,7 +18,7 @@ const MainLayout = () => {
 
 const LayoutWrapper = styled.div`
   width: 100%;
-  height: 100%;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   background: #ffffff;
@@ -26,12 +26,10 @@ const LayoutWrapper = styled.div`
 
 const MainContent = styled.main`
   flex: 1;
-  padding: 20px 0;
-  padding-bottom: 70px;
+  padding: 0;
 
   @media screen and (min-width: 768px) {
-    padding: 40px 0;
-    padding-bottom: 80px;
+    padding: 0;
   }
 `;
 

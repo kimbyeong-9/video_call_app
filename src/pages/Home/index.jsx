@@ -13,12 +13,6 @@ const Home = () => {
   const [userProfile, setUserProfile] = useState(null);
   const [recommendedUsers, setRecommendedUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [startX, setStartX] = useState(0);
-  const [currentX, setCurrentX] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState(0);
-  const sliderRef = useRef(null);
   const [friendsList, setFriendsList] = useState([]); // 친구 목록
   const [onlineUsers, setOnlineUsers] = useState(new Map()); // 온라인 사용자 상태
   const [notification, setNotification] = useState({
@@ -99,60 +93,6 @@ const Home = () => {
     };
   }, [userProfile?.id]);
 
-  // 터치 이벤트 리스너를 non-passive로 설정
-  useEffect(() => {
-    const sliderElement = sliderRef.current;
-    if (!sliderElement) return;
-
-    const handleTouchMoveNonPassive = (e) => {
-      if (!isDragging) return;
-      
-      // 세로 스크롤 방지
-      e.preventDefault();
-      
-      const touch = e.touches[0].clientX;
-      setCurrentX(touch);
-      
-      // 드래그 중 실시간으로 카드 이동 효과
-      const diff = touch - startX;
-      setDragOffset(diff);
-    };
-
-    const handleTouchStartNonPassive = (e) => {
-      setStartX(e.touches[0].clientX);
-      setCurrentX(e.touches[0].clientX);
-      setIsDragging(true);
-    };
-
-    const handleTouchEndNonPassive = () => {
-      if (!isDragging) return;
-      
-      const diff = startX - currentX;
-      const threshold = 50; // 드래그 임계값
-      
-      if (Math.abs(diff) > threshold) {
-        if (diff > 0 && currentIndex < recommendedUsers.length - 1) {
-          setCurrentIndex(currentIndex + 1);
-        } else if (diff < 0 && currentIndex > 0) {
-          setCurrentIndex(currentIndex - 1);
-        }
-      }
-      
-      setIsDragging(false);
-      setDragOffset(0);
-    };
-
-    // non-passive 이벤트 리스너 추가
-    sliderElement.addEventListener('touchstart', handleTouchStartNonPassive, { passive: false });
-    sliderElement.addEventListener('touchmove', handleTouchMoveNonPassive, { passive: false });
-    sliderElement.addEventListener('touchend', handleTouchEndNonPassive, { passive: false });
-
-    return () => {
-      sliderElement.removeEventListener('touchstart', handleTouchStartNonPassive);
-      sliderElement.removeEventListener('touchmove', handleTouchMoveNonPassive);
-      sliderElement.removeEventListener('touchend', handleTouchEndNonPassive);
-    };
-  }, [isDragging, startX, currentX, currentIndex, recommendedUsers.length]);
 
   const loadUserData = async () => {
     try {
@@ -207,24 +147,9 @@ const Home = () => {
   };
 
 
-  const handlePrevUser = () => {
-    setCurrentIndex((prev) => 
-      prev === 0 ? recommendedUsers.length - 1 : prev - 1
-    );
-  };
-
-  const handleNextUser = () => {
-    setCurrentIndex((prev) => 
-      prev === recommendedUsers.length - 1 ? 0 : prev + 1
-    );
-  };
 
   // 프로필 카드 클릭 시 유저 프로필 페이지로 이동
   const handleCardClick = (userId) => {
-    // 드래그 중이면 클릭 이벤트 무시
-    if (isDragging || Math.abs(dragOffset) > 10) {
-      return;
-    }
     navigate(`/profiles/${userId}`);
   };
 
@@ -469,42 +394,6 @@ const Home = () => {
   };
 
 
-  const handleMouseDown = (e) => {
-    setStartX(e.clientX);
-    setCurrentX(e.clientX);
-    setIsDragging(true);
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    const mouse = e.clientX;
-    setCurrentX(mouse);
-    
-    // 드래그 중 실시간으로 카드 이동 효과
-    const diff = mouse - startX;
-    setDragOffset(diff);
-  };
-
-  const handleMouseUp = () => {
-    if (!isDragging) return;
-    
-    const diff = startX - currentX;
-    const threshold = 50;
-    
-    if (Math.abs(diff) > threshold) {
-      if (diff > 0) {
-        handleNextUser();
-      } else {
-        handlePrevUser();
-      }
-    }
-    
-    // 상태 초기화
-    setIsDragging(false);
-    setStartX(0);
-    setCurrentX(0);
-    setDragOffset(0);
-  };
 
   if (isLoading) {
     return (
@@ -537,71 +426,58 @@ const Home = () => {
           </SectionHeader>
 
           {recommendedUsers.length > 0 && (
-            <SliderContainer>
-              <SliderWrapper
-                ref={sliderRef}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                style={{
-                  transform: `translateX(calc(-${currentIndex * 100}% + ${dragOffset}px))`,
-                  transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-                }}
-              >
-                {recommendedUsers.map((user, index) => (
-                  <LargeUserCard
-                    key={user.id}
-                    $backgroundImage={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`}
-                    onClick={() => handleCardClick(user.id)}
-                  >
-                    <CardOverlay />
-                    <CardContent>
-                      <OnlineIndicatorLarge $isOnline={getUserOnlineStatus(user.id).is_online} />
-                      <UserInfoLarge>
-                        <UserNameLarge>{user.nickname}</UserNameLarge>
-                        <UserBioLarge>{user.bio || '소개가 없습니다.'}</UserBioLarge>
-                        <UserInterestsLarge>
-                          {user.interests && user.interests.length > 0 ? (
-                            user.interests.slice(0, 4).map((interest, idx) => (
-                              <InterestTagLarge key={idx}>{interest}</InterestTagLarge>
-                            ))
-                          ) : (
-                            <InterestTagLarge>관심사 없음</InterestTagLarge>
-                          )}
-                        </UserInterestsLarge>
-                      </UserInfoLarge>
-                      <UserActionsLarge>
-                        <ActionButtonLarge 
-                          type="friend" 
-                          $isFriend={friendsList.includes(user.id)}
-                          onClick={(e) => handleFriendToggle(e, user)}
-                        >
-                          {friendsList.includes(user.id) ? (
-                            <FiUserCheck size={20} />
-                          ) : (
-                            <FiUserPlus size={20} />
-                          )}
-                        </ActionButtonLarge>
-                        <ActionButtonLarge 
-                          type="chat" 
-                          onClick={(e) => handleMessageClick(e, user)}
-                        >
-                          <FiMessageCircle size={20} />
-                        </ActionButtonLarge>
-                        <ActionButtonLarge 
-                          type="video" 
-                          onClick={(e) => handleVideoCall(e, user)}
-                        >
-                          <FiVideo size={20} />
-                        </ActionButtonLarge>
-                      </UserActionsLarge>
-                    </CardContent>
-                  </LargeUserCard>
-                ))}
-              </SliderWrapper>
-
-            </SliderContainer>
+            <VerticalScrollContainer>
+              {recommendedUsers.map((user, index) => (
+                <LargeUserCard
+                  key={user.id}
+                  $backgroundImage={user.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nickname}`}
+                  onClick={() => handleCardClick(user.id)}
+                >
+                  <CardOverlay />
+                  <CardContent>
+                    <OnlineIndicatorLarge $isOnline={getUserOnlineStatus(user.id).is_online} />
+                    <UserInfoLarge>
+                      <UserNameLarge>{user.nickname}</UserNameLarge>
+                      <UserBioLarge>{user.bio || '소개가 없습니다.'}</UserBioLarge>
+                      <UserInterestsLarge>
+                        {user.interests && user.interests.length > 0 ? (
+                          user.interests.slice(0, 4).map((interest, idx) => (
+                            <InterestTagLarge key={idx}>{interest}</InterestTagLarge>
+                          ))
+                        ) : (
+                          <InterestTagLarge>관심사 없음</InterestTagLarge>
+                        )}
+                      </UserInterestsLarge>
+                    </UserInfoLarge>
+                    <UserActionsLarge>
+                      <ActionButtonLarge 
+                        type="friend" 
+                        $isFriend={friendsList.includes(user.id)}
+                        onClick={(e) => handleFriendToggle(e, user)}
+                      >
+                        {friendsList.includes(user.id) ? (
+                          <FiUserCheck size={20} />
+                        ) : (
+                          <FiUserPlus size={20} />
+                        )}
+                      </ActionButtonLarge>
+                      <ActionButtonLarge 
+                        type="chat" 
+                        onClick={(e) => handleMessageClick(e, user)}
+                      >
+                        <FiMessageCircle size={20} />
+                      </ActionButtonLarge>
+                      <ActionButtonLarge 
+                        type="video" 
+                        onClick={(e) => handleVideoCall(e, user)}
+                      >
+                        <FiVideo size={20} />
+                      </ActionButtonLarge>
+                    </UserActionsLarge>
+                  </CardContent>
+                </LargeUserCard>
+              ))}
+            </VerticalScrollContainer>
           )}
         </RecommendedSection>
       </Content>
@@ -612,11 +488,15 @@ const Home = () => {
 const HomeWrapper = styled.div`
   min-height: 100vh;
   background: linear-gradient(135deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%);
-  padding-bottom: 80px;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 `;
 
 const Content = styled.div`
-  padding: 20px 0;
+  padding: 20px 16px 40px 16px;
+  min-height: calc(100vh - 70px);
 `;
 
 const LoadingContainer = styled.div`
@@ -652,7 +532,8 @@ const LoadingText = styled.p`
 
 // 추천 섹션
 const RecommendedSection = styled.div`
-  margin-bottom: 32px;
+  margin-bottom: 30px;
+  padding-bottom: 0;
 `;
 
 const SectionHeader = styled.div`
@@ -681,32 +562,18 @@ const SectionSubtitle = styled.p`
   margin: 0;
 `;
 
-// 스와이프 가능한 카드 슬라이더
-const SliderContainer = styled.div`
-  position: relative;
-  overflow: hidden;
-  border-radius: 20px;
-`;
-
-const SliderWrapper = styled.div`
+// 세로 스크롤 가능한 카드 컨테이너
+const VerticalScrollContainer = styled.div`
   display: flex;
-  width: 100%;
-  cursor: grab;
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  touch-action: pan-y;
-  -webkit-tap-highlight-color: transparent;
-  
-  &:active {
-    cursor: grabbing;
-  }
+  flex-direction: column;
+  gap: 20px;
+  padding: 0;
+  margin: 0;
 `;
 
 const LargeUserCard = styled.div`
-  min-width: 100%;
-  height: 600px;
+  width: 100%;
+  height: 500px;
   border-radius: 20px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   display: flex;
@@ -722,6 +589,7 @@ const LargeUserCard = styled.div`
   background-repeat: no-repeat;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  flex-shrink: 0;
 
   &:hover {
     transform: scale(1.02);

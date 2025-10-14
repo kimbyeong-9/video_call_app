@@ -35,30 +35,30 @@ const Chatlist = () => {
       // 데이터베이스에서 사용자가 참여한 채팅방 목록 가져오기
       console.log('🔵 데이터베이스에서 채팅방 목록 조회');
 
-      // 1. 현재 사용자가 보낸 메시지가 있는 room_id 가져오기
-      const { data: myMessagesData, error: myMessagesError } = await supabase
-        .from('messages')
+      // 1. chat_participants 테이블에서 현재 사용자가 참여한 채팅방 ID 가져오기
+      const { data: myParticipantsData, error: myParticipantsError } = await supabase
+        .from('chat_participants')
         .select('room_id')
         .eq('user_id', user.id);
 
-      if (myMessagesError) {
-        console.error('❌ 내 메시지 조회 오류:', myMessagesError);
+      if (myParticipantsError) {
+        console.error('❌ 내 참여 채팅방 조회 오류:', myParticipantsError);
         setChatRooms([]);
         setLoading(false);
         return;
       }
 
-      console.log('🔵 내가 보낸 메시지가 있는 방:', myMessagesData);
+      console.log('🔵 내가 참여한 채팅방:', myParticipantsData);
 
-      if (!myMessagesData || myMessagesData.length === 0) {
+      if (!myParticipantsData || myParticipantsData.length === 0) {
         console.log('🔵 내가 참여한 채팅방 없음');
         setChatRooms([]);
         setLoading(false);
         return;
       }
 
-      // 2. 내가 참여한 채팅방 ID 추출 (중복 제거)
-      const myRoomIds = [...new Set(myMessagesData.map(msg => msg.room_id))];
+      // 2. 내가 참여한 채팅방 ID 추출
+      const myRoomIds = myParticipantsData.map(participant => participant.room_id);
       console.log('🔵 내가 참여 중인 채팅방 ID들:', myRoomIds);
 
       // 3. 해당 채팅방들의 모든 메시지 가져오기
@@ -86,15 +86,14 @@ const Chatlist = () => {
           // 마지막 메시지
           const lastMsg = roomMessages[0];
 
-          // 상대방 ID 찾기 (나를 제외한 사용자)
-          const otherUserIds = [...new Set(
-            roomMessages
-              .map(msg => msg.user_id)
-              .filter(userId => userId !== user.id)
-          )];
+          // 상대방 ID 찾기 (chat_participants에서 나를 제외한 사용자)
+          const { data: participantsData } = await supabase
+            .from('chat_participants')
+            .select('user_id')
+            .eq('room_id', roomId)
+            .neq('user_id', user.id);
 
-          // 상대방이 없으면 (혼자만 메시지 보낸 경우) null 반환
-          if (otherUserIds.length === 0) {
+          if (!participantsData || participantsData.length === 0) {
             return null;
           }
 
@@ -102,7 +101,7 @@ const Chatlist = () => {
           const { data: otherUserData } = await supabase
             .from('users')
             .select('id, nickname, email, profile_image')
-            .eq('id', otherUserIds[0])
+            .eq('id', participantsData[0].user_id)
             .single();
 
           if (!otherUserData) {
@@ -114,8 +113,8 @@ const Chatlist = () => {
             nickname: otherUserData.nickname,
             email: otherUserData.email,
             profileImage: otherUserData.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherUserData.nickname}`,
-            lastMessage: lastMsg.content,
-            lastMessageDate: lastMsg.created_at
+            lastMessage: lastMsg ? lastMsg.content : '메시지가 없습니다',
+            lastMessageDate: lastMsg ? lastMsg.created_at : null
           };
         })
       );
@@ -335,7 +334,7 @@ const Chatlist = () => {
 };
 
 const ChatlistWrapper = styled.div`
-  padding: 20px 16px;
+  padding: 20px 0;
   padding-bottom: 70px;
 `;
 

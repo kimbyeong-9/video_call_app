@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiVideo } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
 import { videoCall, WebRTCManager } from '../../utils/webrtc';
-import { livePresenceManager } from '../../utils/livePresence';
+import { onlineStatusManager } from '../../utils/onlineStatus';
 
 const Live = () => {
   const navigate = useNavigate();
@@ -14,12 +14,12 @@ const Live = () => {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Presence 기반 실시간 접속 유저 관리
+  // 전체 앱에서 활동 중인 유저 관리 (onlineStatus 사용)
   useEffect(() => {
     let isMounted = true;
-    let unsubscribePresence = null;
+    let unsubscribeStatus = null;
 
-    const initializePresence = async () => {
+    const initializeOnlineUsers = async () => {
       try {
         // 현재 로그인한 사용자 정보 가져오기
         const storedUser = localStorage.getItem('currentUser');
@@ -51,30 +51,22 @@ const Live = () => {
           setCurrentUser(fullUserData);
         }
 
-        // Presence 채널에 참여 (Supabase에서 가져온 정확한 데이터 사용)
-        const joined = await livePresenceManager.join(fullUserData.id, {
-          nickname: fullUserData.nickname || fullUserData.email?.split('@')[0],
-          email: fullUserData.email,
-          profile_image: fullUserData.profile_image,
-          bio: fullUserData.bio,
-          interests: fullUserData.interests,
-        });
+        // OnlineStatus 매니저 초기화
+        await onlineStatusManager.initialize(fullUserData.id);
+        console.log('✅ Live - OnlineStatusManager 초기화 완료');
 
-        if (!joined) {
-          console.error('❌ Live - Presence 참여 실패');
-          if (isMounted) setLoading(false);
-          return;
-        }
+        // 온라인 상태 변경 리스너 등록
+        unsubscribeStatus = onlineStatusManager.onStatusChange(async (statusEntries) => {
+          console.log('🔵 Live - 온라인 유저 업데이트:', statusEntries.length, '명');
 
-        // Presence 상태 변경 리스너 등록
-        unsubscribePresence = livePresenceManager.onPresenceChange(async (onlineUsers) => {
-          console.log('🔵 Live - 접속 중인 유저 업데이트:', onlineUsers.length, '명');
-          console.log('🔵 Live - Presence 유저 데이터:', onlineUsers);
+          // statusEntries는 [userId, {is_online, last_seen}] 배열
+          const onlineUserIds = statusEntries
+            .filter(([_userId, status]) => status.is_online)
+            .map(([userId, _status]) => userId);
 
-          // Supabase에서 각 유저의 최신 정보 가져오기
-          const userIds = onlineUsers.map(u => u.id);
+          console.log('🔵 Live - 온라인 유저 ID 목록:', onlineUserIds);
 
-          if (userIds.length === 0) {
+          if (onlineUserIds.length === 0) {
             if (isMounted) {
               setUsers([]);
               setLoading(false);
@@ -82,36 +74,32 @@ const Live = () => {
             return;
           }
 
+          // Supabase에서 온라인 유저들의 프로필 정보 가져오기
           const { data: usersFromDB, error: usersError } = await supabase
             .from('users')
             .select('*')
-            .in('id', userIds);
+            .in('id', onlineUserIds)
+            .neq('id', fullUserData.id); // 자신은 제외
 
           if (usersError) {
             console.error('❌ Live - 유저 정보 조회 실패:', usersError);
-            // Presence 데이터 그대로 사용
-            const usersWithImages = onlineUsers.map(u => ({
-              ...u,
-              profileImage: u.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.nickname}`,
-              interests: u.interests || [],
-              bio: u.bio || '안녕하세요!',
-            }));
-
             if (isMounted) {
-              setUsers(usersWithImages);
+              setUsers([]);
               setLoading(false);
             }
             return;
           }
 
-          console.log('✅ Live - Supabase에서 가져온 유저 정보:', usersFromDB);
+          console.log('✅ Live - Supabase에서 가져온 온라인 유저 정보:', usersFromDB);
 
-          // Supabase DB 데이터와 Presence 데이터 병합
-          const mergedUsers = usersFromDB.map(dbUser => {
-            const presenceUser = onlineUsers.find(u => u.id === dbUser.id);
+          // 유저 데이터 포맷팅
+          const formattedUsers = usersFromDB.map(dbUser => {
+            const statusEntry = statusEntries.find(([userId, _]) => userId === dbUser.id);
+            const lastSeen = statusEntry ? statusEntry[1].last_seen : new Date().toISOString();
+
             return {
               id: dbUser.id,
-              nickname: dbUser.nickname || dbUser.email?.split('@')[0],
+              nickname: dbUser.nickname || dbUser.email?.split('@')[0] || '사용자',
               email: dbUser.email,
               profile_image: dbUser.profile_image,
               profileImage: dbUser.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${dbUser.nickname}`,
@@ -119,21 +107,21 @@ const Live = () => {
               interests: dbUser.interests || [],
               status: '온라인',
               statusType: 'online',
-              online_at: presenceUser?.online_at || new Date().toISOString(),
+              online_at: lastSeen,
             };
           });
 
-          console.log('✅ Live - 병합된 유저 데이터:', mergedUsers);
+          console.log('✅ Live - 포맷된 유저 데이터:', formattedUsers);
 
           if (isMounted) {
-            setUsers(mergedUsers);
+            setUsers(formattedUsers);
             setLoading(false);
           }
         });
 
-        console.log('✅ Live - Presence 초기화 완료');
+        console.log('✅ Live - 온라인 상태 초기화 완료');
       } catch (error) {
-        console.error('❌ Live - Presence 초기화 오류:', error);
+        console.error('❌ Live - 온라인 상태 초기화 오류:', error);
         if (isMounted) {
           setUsers([]);
           setLoading(false);
@@ -141,19 +129,19 @@ const Live = () => {
       }
     };
 
-    initializePresence();
+    initializeOnlineUsers();
 
     return () => {
       isMounted = false;
       console.log('🔵 Live - cleanup 시작');
 
-      // Presence 리스너 해제
-      if (unsubscribePresence) {
-        unsubscribePresence();
+      // 상태 변경 리스너 해제
+      if (unsubscribeStatus) {
+        unsubscribeStatus();
       }
 
-      // Presence 채널에서 나가기
-      livePresenceManager.leave();
+      // OnlineStatusManager는 싱글톤이므로 cleanup 하지 않음
+      // 다른 페이지에서도 계속 사용됨
     };
   }, [navigate]);
 
@@ -169,9 +157,12 @@ const Live = () => {
       const roomId = [currentUser.id, receiverUser.id].sort().join('_');
       const chatRoomId = `chat_${roomId}`;
 
-      console.log('🔵 Live - 메시지 전송:', chatRoomId);
+      console.log('🔵 Live - 채팅방 생성 및 메시지 전송:', chatRoomId);
 
-      // 메시지 저장
+      // 1. 채팅방 생성
+      await createChatRoom(chatRoomId, currentUser, receiverUser);
+
+      // 2. 메시지 저장
       const { error } = await supabase.from('messages').insert({
         room_id: chatRoomId,
         user_id: currentUser.id,
@@ -192,6 +183,62 @@ const Live = () => {
     } catch (error) {
       console.error('❌ Live - 메시지 전송 예외:', error);
       alert('메시지 전송에 실패했습니다.');
+    }
+  };
+
+  // 채팅방 생성 함수
+  const createChatRoom = async (roomId, currentUser, otherUser) => {
+    try {
+      const currentTime = new Date().toISOString();
+
+      // 1. chat_rooms 테이블에 room_id 생성
+      const { error: roomError } = await supabase
+        .from('chat_rooms')
+        .upsert({
+          id: roomId,
+          created_at: currentTime,
+          updated_at: currentTime
+        }, {
+          onConflict: 'id'
+        });
+
+      if (roomError) {
+        console.warn('⚠️ Live - chat_rooms 생성 실패:', roomError);
+      } else {
+        console.log('✅ Live - chat_rooms 생성 완료:', roomId);
+      }
+
+      // 2. chat_participants 테이블에 양쪽 사용자 추가
+      const participants = [
+        {
+          user_id: currentUser.id,
+          room_id: roomId,
+          joined_at: currentTime,
+          last_read_at: currentTime
+        },
+        {
+          user_id: otherUser.id,
+          room_id: roomId,
+          joined_at: currentTime,
+          last_read_at: null // 상대방은 아직 읽지 않음
+        }
+      ];
+
+      const { error: participantError } = await supabase
+        .from('chat_participants')
+        .upsert(participants, {
+          onConflict: 'user_id,room_id'
+        });
+
+      if (participantError) {
+        console.warn('⚠️ Live - chat_participants 생성 실패:', participantError);
+      } else {
+        console.log('✅ Live - chat_participants 생성 완료:', roomId);
+      }
+
+    } catch (error) {
+      console.error('❌ Live - 채팅방 생성 오류:', error);
+      throw error;
     }
   };
 
@@ -266,7 +313,9 @@ const Live = () => {
           <br />
           <strong>프로필 이미지:</strong> {currentUser.profile_image ? '설정됨' : '미설정'}
           <br />
-          <strong>접속 중인 유저:</strong> {users.length}명
+          <strong>전체 앱에서 활동 중인 유저:</strong> {users.length}명
+          <br />
+          <InfoNote>💡 모든 페이지에서 활동 중인 사용자를 표시합니다</InfoNote>
         </DebugInfo>
       )}
 
@@ -358,6 +407,16 @@ const DebugInfo = styled.div`
   strong {
     color: var(--primary-blue);
   }
+`;
+
+const InfoNote = styled.div`
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(43, 87, 154, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--primary-blue);
+  font-weight: 500;
 `;
 
 const UserList = styled.div`

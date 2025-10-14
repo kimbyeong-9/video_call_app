@@ -174,8 +174,8 @@ const Home = () => {
     navigate(`/profiles/${userId}`);
   };
 
-  // 메시지 버튼 클릭 시 채팅방으로 이동
-  const handleMessageClick = (e, user) => {
+  // 메시지 버튼 클릭 시 채팅방 생성 및 이동
+  const handleMessageClick = async (e, user) => {
     e.stopPropagation(); // 카드 클릭 이벤트 전파 방지
     
     if (!userProfile?.id) {
@@ -188,11 +188,79 @@ const Home = () => {
       return;
     }
 
-    // 채팅방 ID 생성 (두 사용자 ID를 정렬하여 조합)
-    const sortedIds = [userProfile.id, user.id].sort();
-    const chatRoomId = `chat_${sortedIds[0]}_${sortedIds[1]}`;
-    
-    navigate(`/chatting/${chatRoomId}`);
+    try {
+      // 채팅방 ID 생성 (두 사용자 ID를 정렬하여 조합)
+      const sortedIds = [userProfile.id, user.id].sort();
+      const chatRoomId = `chat_${sortedIds[0]}_${sortedIds[1]}`;
+      
+      console.log('🔵 Home - 채팅방 생성 시작:', chatRoomId);
+      
+      // 채팅방 생성
+      await createChatRoom(chatRoomId, userProfile, user);
+      
+      // 채팅방으로 이동
+      navigate(`/chatting/${chatRoomId}`);
+      
+    } catch (error) {
+      console.error('❌ Home - 채팅방 생성 오류:', error);
+      alert('채팅방을 생성하는 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 채팅방 생성 함수
+  const createChatRoom = async (roomId, currentUser, otherUser) => {
+    try {
+      const currentTime = new Date().toISOString();
+
+      // 1. chat_rooms 테이블에 room_id 생성
+      const { error: roomError } = await supabase
+        .from('chat_rooms')
+        .upsert({
+          id: roomId,
+          created_at: currentTime,
+          updated_at: currentTime
+        }, {
+          onConflict: 'id'
+        });
+
+      if (roomError) {
+        console.warn('⚠️ Home - chat_rooms 생성 실패:', roomError);
+      } else {
+        console.log('✅ Home - chat_rooms 생성 완료:', roomId);
+      }
+
+      // 2. chat_participants 테이블에 양쪽 사용자 추가
+      const participants = [
+        {
+          user_id: currentUser.id,
+          room_id: roomId,
+          joined_at: currentTime,
+          last_read_at: currentTime
+        },
+        {
+          user_id: otherUser.id,
+          room_id: roomId,
+          joined_at: currentTime,
+          last_read_at: null // 상대방은 아직 읽지 않음
+        }
+      ];
+
+      const { error: participantError } = await supabase
+        .from('chat_participants')
+        .upsert(participants, {
+          onConflict: 'user_id,room_id'
+        });
+
+      if (participantError) {
+        console.warn('⚠️ Home - chat_participants 생성 실패:', participantError);
+      } else {
+        console.log('✅ Home - chat_participants 생성 완료:', roomId);
+      }
+
+    } catch (error) {
+      console.error('❌ Home - 채팅방 생성 오류:', error);
+      throw error;
+    }
   };
 
   // 친구 목록 로드

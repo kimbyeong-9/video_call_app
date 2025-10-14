@@ -122,6 +122,9 @@ const Chatting = () => {
       console.log('🔵 parsedUser:', parsedUser);
       setCurrentUser(parsedUser);
 
+      // 채팅방 입장 시 chat_rooms와 chat_participants 생성
+      await createChatRoomIfNotExists(parsedUser);
+
       // 실제 메시지 로드
       console.log('🔵 실제 메시지 로드 시도');
       await loadMessages();
@@ -132,6 +135,76 @@ const Chatting = () => {
     } finally {
       console.log('🔵 setLoading(false) 호출');
       setLoading(false);
+    }
+  };
+
+  // 채팅방 생성 함수
+  const createChatRoomIfNotExists = async (user) => {
+    try {
+      console.log('🔵 채팅방 생성/확인 시작:', roomId);
+
+      const currentTime = new Date().toISOString();
+
+      // 1. chat_rooms 테이블에 room_id 생성
+      const { error: roomError } = await supabase
+        .from('chat_rooms')
+        .upsert({
+          id: roomId,
+          created_at: currentTime,
+          updated_at: currentTime
+        }, {
+          onConflict: 'id'
+        });
+
+      if (roomError) {
+        console.warn('⚠️ chat_rooms 생성/업데이트 실패:', roomError);
+      } else {
+        console.log('✅ chat_rooms 확인/생성 완료:', roomId);
+      }
+
+      // 2. chat_participants 테이블에 현재 사용자 추가
+      const { error: participantError } = await supabase
+        .from('chat_participants')
+        .upsert({
+          user_id: user.id,
+          room_id: roomId,
+          joined_at: currentTime,
+          last_read_at: currentTime
+        }, {
+          onConflict: 'user_id,room_id'
+        });
+
+      if (participantError) {
+        console.warn('⚠️ chat_participants 생성/업데이트 실패:', participantError);
+      } else {
+        console.log('✅ chat_participants 확인/생성 완료:', user.id, roomId);
+      }
+
+      // 3. 상대방도 chat_participants에 추가 (room_id에서 상대방 ID 추출)
+      const roomIdParts = roomId.replace('chat_', '').split('_');
+      const otherUserId = roomIdParts.find(id => id !== user.id);
+      
+      if (otherUserId) {
+        const { error: otherParticipantError } = await supabase
+          .from('chat_participants')
+          .upsert({
+            user_id: otherUserId,
+            room_id: roomId,
+            joined_at: currentTime,
+            last_read_at: null // 상대방은 아직 읽지 않음
+          }, {
+            onConflict: 'user_id,room_id'
+          });
+
+        if (otherParticipantError) {
+          console.warn('⚠️ 상대방 chat_participants 생성/업데이트 실패:', otherParticipantError);
+        } else {
+          console.log('✅ 상대방 chat_participants 확인/생성 완료:', otherUserId, roomId);
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ 채팅방 생성 오류:', error);
     }
   };
 
@@ -284,6 +357,26 @@ const Chatting = () => {
 
     try {
       console.log('🔵 메시지 전송 시작:', newMessage.trim());
+      
+      // 1. 먼저 chat_rooms 테이블에 room_id가 있는지 확인하고, 없으면 생성
+      const currentTime = new Date().toISOString();
+      const { error: roomError } = await supabase
+        .from('chat_rooms')
+        .upsert({
+          id: roomId,
+          created_at: currentTime,
+          updated_at: currentTime
+        }, {
+          onConflict: 'id'
+        });
+
+      if (roomError) {
+        console.warn('⚠️ chat_rooms 생성/업데이트 실패 (무시하고 계속):', roomError);
+      } else {
+        console.log('✅ chat_rooms 확인/생성 완료:', roomId);
+      }
+
+      // 2. 메시지 전송
       const { error } = await supabase.from('messages').insert({
         room_id: roomId,
         user_id: currentUser.id,

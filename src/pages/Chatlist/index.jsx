@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
+import { FiTrash2 } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
-import { useUnreadMessages } from '../../contexts/UnreadMessagesContext';
 import { onlineStatusManager } from '../../utils/onlineStatus';
 
 const Chatlist = () => {
@@ -11,7 +11,13 @@ const Chatlist = () => {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState(new Map()); // 온라인 사용자 상태
-  const { unreadByRoom, markRoomAsRead } = useUnreadMessages();
+  const [swipedItemId, setSwipedItemId] = useState(null); // 스와이프된 아이템 ID
+  const [swipeOffset, setSwipeOffset] = useState(0); // 스와이프 오프셋
+  
+  // 스와이프 관련 refs
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const isDragging = useRef(false);
 
   const loadChatRooms = useCallback(async () => {
     console.log('🔵 loadChatRooms 시작');
@@ -247,10 +253,168 @@ const Chatlist = () => {
     };
   }, [currentUser, loadChatRooms]);
 
+  // 전역 클릭 이벤트로 스와이프 닫기
+  useEffect(() => {
+    const handleGlobalClick = (e) => {
+      // 스와이프된 아이템이 있을 때만 처리
+      if (swipedItemId) {
+        // 클릭된 요소가 채팅 아이템이나 그 자식 요소가 아닌 경우
+        const chatItem = e.target.closest('[data-chat-item]');
+        const deleteButton = e.target.closest('[data-delete-button]');
+        
+        // 채팅 아이템이 아니고 삭제 버튼도 아닌 경우에만 스와이프 닫기
+        if (!chatItem && !deleteButton) {
+          console.log('🔵 전역 클릭으로 스와이프 닫기');
+          // 부드러운 애니메이션을 위해 먼저 offset을 0으로 설정
+          setSwipeOffset(0);
+          // 약간의 지연 후 swipedItemId를 null로 설정
+          setTimeout(() => {
+            setSwipedItemId(null);
+          }, 100);
+        }
+      }
+    };
+
+    // 전역 클릭 이벤트 리스너 추가
+    document.addEventListener('click', handleGlobalClick);
+    document.addEventListener('touchstart', handleGlobalClick);
+
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      document.removeEventListener('click', handleGlobalClick);
+      document.removeEventListener('touchstart', handleGlobalClick);
+    };
+  }, [swipedItemId]);
+
+  // 스와이프 핸들러
+  const handleTouchStart = (e, roomId) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isDragging.current = false;
+  };
+
+  const handleTouchMove = (e, roomId) => {
+    if (!touchStartX.current) return;
+
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const deltaX = currentX - touchStartX.current;
+    const deltaY = currentY - touchStartY.current;
+
+    // 수직 스크롤과 구분하기 위해 수평 이동이 더 클 때만 스와이프로 인식
+    // 더 엄격한 조건: 수평 이동이 수직 이동의 2배 이상일 때만
+    if (Math.abs(deltaX) > Math.abs(deltaY) * 2 && Math.abs(deltaX) > 15) {
+      isDragging.current = true;
+      
+      // 왼쪽으로 스와이프할 때만 처리
+      if (deltaX < 0) {
+        setSwipedItemId(roomId);
+        setSwipeOffset(Math.max(deltaX, -80)); // 최대 80px까지 스와이프
+      }
+    }
+  };
+
+  const handleTouchEnd = (e, roomId) => {
+    if (!isDragging.current) return;
+
+    const currentX = e.changedTouches[0].clientX;
+    const deltaX = currentX - touchStartX.current;
+
+    // 스와이프가 충분히 크면 삭제 버튼 표시, 아니면 원래 위치로
+    if (deltaX < -40) {
+      setSwipeOffset(-80);
+    } else {
+      setSwipeOffset(0);
+      setSwipedItemId(null);
+    }
+
+    touchStartX.current = 0;
+    touchStartY.current = 0;
+    isDragging.current = false;
+  };
+
   const handleChatItemClick = (roomId) => {
-    // 채팅방 입장 시 읽음 처리
-    markRoomAsRead(roomId);
-    navigate(`/chatting/${roomId}`);
+    // 스와이프된 상태가 아니면 채팅방 입장
+    if (swipedItemId !== roomId) {
+      navigate(`/chatting/${roomId}`);
+    }
+  };
+
+  // 채팅방 나가기 함수
+  const handleExitChatRoom = async (roomId) => {
+    if (!currentUser) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    const confirmExit = window.confirm('채팅방을 나가시겠습니까? 채팅방이 삭제됩니다.');
+    if (!confirmExit) return;
+
+    try {
+      console.log('🔵 채팅방 나가기 시작, roomId:', roomId, 'userId:', currentUser.id);
+
+      // 1. 현재 사용자를 chat_participants에서 제거
+      const { error: participantError } = await supabase
+        .from('chat_participants')
+        .delete()
+        .eq('room_id', roomId)
+        .eq('user_id', currentUser.id);
+
+      if (participantError) {
+        console.error('❌ 참가자 제거 오류:', participantError);
+        throw participantError;
+      }
+
+      // 2. 남은 참가자가 있는지 확인
+      const { data: remainingParticipants, error: checkError } = await supabase
+        .from('chat_participants')
+        .select('user_id')
+        .eq('room_id', roomId);
+
+      if (checkError) {
+        console.error('❌ 남은 참가자 확인 오류:', checkError);
+        throw checkError;
+      }
+
+      // 3. 참가자가 없으면 채팅방과 메시지 삭제
+      if (!remainingParticipants || remainingParticipants.length === 0) {
+        // 메시지 삭제
+        const { error: messagesError } = await supabase
+          .from('messages')
+          .delete()
+          .eq('room_id', roomId);
+
+        if (messagesError) {
+          console.error('❌ 메시지 삭제 오류:', messagesError);
+          throw messagesError;
+        }
+
+        // 채팅방 삭제
+        const { error: roomError } = await supabase
+          .from('chat_rooms')
+          .delete()
+          .eq('id', roomId);
+
+        if (roomError) {
+          console.error('❌ 채팅방 삭제 오류:', roomError);
+          throw roomError;
+        }
+      }
+
+      // 4. 로컬 상태에서도 채팅방 제거
+      setChatRooms(prev => prev.filter(room => room.id !== roomId));
+      
+      // 5. 스와이프 상태 초기화
+      setSwipedItemId(null);
+      setSwipeOffset(0);
+      
+      console.log('✅ 채팅방 나가기 완료');
+      alert('채팅방을 나갔습니다.');
+      
+    } catch (error) {
+      console.error('❌ 채팅방 나가기 오류:', error);
+      alert('채팅방 나가기에 실패했습니다: ' + error.message);
+    }
   };
 
   const formatDate = (dateString) => {
@@ -302,29 +466,44 @@ const Chatlist = () => {
       ) : (
         <ChatList>
           {chatRooms.map((chat) => {
-            const unreadCount = unreadByRoom[chat.id] || 0;
+            const isSwiped = swipedItemId === chat.id;
             return (
-              <ChatItem
-                key={chat.id}
-                onClick={() => handleChatItemClick(chat.id)}
-              >
-                <ProfileSection>
-                  <ProfileImage src={chat.profileImage} alt={chat.nickname} />
-                  <OnlineIndicator $isOnline={getUserOnlineStatus(chat.userId).is_online} />
-                </ProfileSection>
-                <ChatInfo>
-                  <ChatHeader>
-                    <Nickname>{chat.nickname}</Nickname>
-                    <LastMessageDate>
-                      {formatDate(chat.lastMessageDate)}
-                    </LastMessageDate>
-                  </ChatHeader>
-                  <LastMessage>{chat.lastMessage}</LastMessage>
-                </ChatInfo>
-                {unreadCount > 0 && (
-                  <UnreadBadge>{unreadCount > 99 ? '99+' : unreadCount}</UnreadBadge>
+              <ChatItemContainer key={chat.id} data-chat-item={chat.id}>
+                <ChatItem
+                  $isSwiped={isSwiped}
+                  $swipeOffset={swipeOffset}
+                  onClick={() => handleChatItemClick(chat.id)}
+                  onTouchStart={(e) => handleTouchStart(e, chat.id)}
+                  onTouchMove={(e) => handleTouchMove(e, chat.id)}
+                  onTouchEnd={(e) => handleTouchEnd(e, chat.id)}
+                >
+                  <ProfileSection>
+                    <ProfileImage src={chat.profileImage} alt={chat.nickname} />
+                    <OnlineIndicator $isOnline={getUserOnlineStatus(chat.userId).is_online} />
+                  </ProfileSection>
+                  <ChatInfo>
+                    <ChatHeader>
+                      <Nickname>{chat.nickname}</Nickname>
+                      <LastMessageDate>
+                        {formatDate(chat.lastMessageDate)}
+                      </LastMessageDate>
+                    </ChatHeader>
+                    <LastMessage>{chat.lastMessage}</LastMessage>
+                  </ChatInfo>
+                </ChatItem>
+                
+                {/* 삭제 버튼 */}
+                {isSwiped && (
+                  <DeleteButtonContainer>
+                    <DeleteButton 
+                      data-delete-button={chat.id}
+                      onClick={() => handleExitChatRoom(chat.id)}
+                    >
+                      <FiTrash2 size={20} />
+                    </DeleteButton>
+                  </DeleteButtonContainer>
                 )}
-              </ChatItem>
+              </ChatItemContainer>
             );
           })}
         </ChatList>
@@ -361,6 +540,12 @@ const ChatList = styled.div`
   gap: 16px;
 `;
 
+const ChatItemContainer = styled.div`
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+`;
+
 const ChatItem = styled.div`
   display: flex;
   align-items: center;
@@ -369,7 +554,10 @@ const ChatItem = styled.div`
   border-radius: 12px;
   cursor: pointer;
   position: relative;
-  transition: background-color 0.2s ease;
+  transition: all 0.3s ease;
+  transform: translateX(${props => props.$swipeOffset || 0}px);
+  z-index: 2;
+  touch-action: pan-y pinch-zoom; /* 수직 스크롤과 줌은 허용, 수평 스크롤은 제한 */
 
   &:hover {
     background-color: #f8f9fa;
@@ -442,23 +630,6 @@ const LastMessage = styled.p`
   text-overflow: ellipsis;
 `;
 
-const UnreadBadge = styled.div`
-  position: absolute;
-  top: 65%;
-  right: 12px;
-  transform: translateY(-50%);
-  background-color: #007AFF;
-  color: white;
-  font-size: 12px;
-  font-weight: 600;
-  min-width: 20px;
-  height: 20px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 6px;
-`;
 
 const LoadingMessage = styled.div`
   display: flex;
@@ -494,6 +665,42 @@ const EmptySubText = styled.p`
   font-size: 14px;
   color: #888;
   margin: 0;
+`;
+
+const DeleteButtonContainer = styled.div`
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  background: #dc2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  border-radius: 0 12px 12px 0;
+`;
+
+const DeleteButton = styled.button`
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
 `;
 
 export default Chatlist;

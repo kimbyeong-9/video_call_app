@@ -1,7 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useUnreadMessages } from '../../contexts/UnreadMessagesContext';
 import HouseIcon from '../../assets/images/house_17996174.png';
 import PersonIcon from '../../assets/images/person_6797008.png';
 import DialogueIcon from '../../assets/images/dialogue-bubble_17603703.png';
@@ -10,12 +9,11 @@ import SearchIcon from '../../assets/images/search_18292397.png';
 const Footer = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { unreadCount } = useUnreadMessages();
 
   const tabs = [
     { path: '/', label: '홈', icon: 'house', isImage: true },
     { path: '/friends', label: '친구목록', icon: 'person', isImage: true },
-    { path: '/chatlist', label: '채팅', icon: 'dialogue', isImage: true, showBadge: true },
+    { path: '/chatlist', label: '채팅', icon: 'dialogue', isImage: true },
     { path: '/search', label: '검색', icon: 'search', isImage: true }
   ];
 
@@ -41,9 +39,6 @@ const Footer = () => {
                 )
               ) : (
                 <TabIcon>{tab.icon}</TabIcon>
-              )}
-              {tab.showBadge && unreadCount > 0 && (
-                <NotificationBadge>{unreadCount > 99 ? '99+' : unreadCount}</NotificationBadge>
               )}
             </IconWrapper>
             <TabLabel $isActive={location.pathname === tab.path}>
@@ -133,24 +128,6 @@ const SearchImage = styled.img`
 `;
 
 
-const NotificationBadge = styled.div`
-  position: absolute;
-  top: -4px;
-  right: -8px;
-  background-color: #FF3B30;
-  color: white;
-  font-size: 9px;
-  font-weight: 700;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
-  border: 2px solid #ffffff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-`;
 
 const TabLabel = styled.span`
   font-size: 10px;

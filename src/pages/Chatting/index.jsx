@@ -117,6 +117,35 @@ const Chatting = () => {
     scrollToBottom();
   }, [messages]);
 
+  // 5️⃣ 전역 클릭 이벤트로 메시지 삭제 버튼 닫기
+  useEffect(() => {
+    const handleGlobalClick = (e) => {
+      // 삭제 버튼이 표시된 상태일 때만 처리
+      if (showDeleteButton && selectedMessageId) {
+        // 클릭된 요소가 메시지 버블이나 삭제 버튼이 아닌 경우
+        const messageBubble = e.target.closest('[data-message-bubble]');
+        const deleteButton = e.target.closest('[data-delete-button]');
+        
+        // 메시지 버블이 아니고 삭제 버튼도 아닌 경우에만 삭제 버튼 닫기
+        if (!messageBubble && !deleteButton) {
+          console.log('🔵 전역 클릭으로 메시지 삭제 버튼 닫기');
+          setShowDeleteButton(false);
+          setSelectedMessageId(null);
+        }
+      }
+    };
+
+    // 전역 클릭 이벤트 리스너 추가
+    document.addEventListener('click', handleGlobalClick);
+    document.addEventListener('touchstart', handleGlobalClick);
+
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      document.removeEventListener('click', handleGlobalClick);
+      document.removeEventListener('touchstart', handleGlobalClick);
+    };
+  }, [showDeleteButton, selectedMessageId]);
+
   const initializeChat = async () => {
     console.log('🔵 initializeChat 시작, roomId:', roomId);
     try {
@@ -764,6 +793,7 @@ const Chatting = () => {
                     <MessageContent>
                       {showTimeAndProfile && <SenderName>{senderName}</SenderName>}
                       <MessageBubble 
+                        data-message-bubble={msg.id}
                         $isOwn={isOwn} 
                         $isSelected={selectedMessageId === msg.id}
                         title={formatFullTime(msg.created_at)}
@@ -782,6 +812,7 @@ const Chatting = () => {
                 )}
                 {isOwn && (
                   <MessageBubble 
+                    data-message-bubble={msg.id}
                     $isOwn={isOwn} 
                     $isSelected={selectedMessageId === msg.id}
                     title={formatFullTime(msg.created_at)}
@@ -800,7 +831,10 @@ const Chatting = () => {
                 {/* 삭제/숨기기 버튼 */}
                 {showDeleteButton && selectedMessageId === msg.id && (
                   <DeleteButtonContainer>
-                    <DeleteButton onClick={() => handleDeleteMessage(msg.id, isOwn)}>
+                    <DeleteButton 
+                      data-delete-button={msg.id}
+                      onClick={() => handleDeleteMessage(msg.id, isOwn)}
+                    >
                       <FiTrash2 size={16} />
                       {isOwn ? '삭제' : '숨기기'}
                     </DeleteButton>

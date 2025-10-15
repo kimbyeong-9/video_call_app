@@ -128,8 +128,26 @@ const Chatlist = () => {
       // null 값 제거
       const validRooms = roomsData.filter(room => room !== null);
 
-      console.log('🔵 채팅방 목록:', validRooms);
-      setChatRooms(validRooms);
+      // 가장 최근에 연락한 채팅방이 위에 오도록 정렬
+      const sortedRooms = validRooms.sort((a, b) => {
+        // lastMessageTime이 있는 경우 해당 시간으로 정렬
+        if (a.lastMessageTime && b.lastMessageTime) {
+          return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
+        }
+        // lastMessageTime이 없는 경우 created_at으로 정렬
+        if (a.lastMessageTime && !b.lastMessageTime) {
+          return -1; // a가 더 최근
+        }
+        if (!a.lastMessageTime && b.lastMessageTime) {
+          return 1; // b가 더 최근
+        }
+        // 둘 다 lastMessageTime이 없는 경우 created_at으로 정렬
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+
+      console.log('🔵 정렬된 채팅방 목록 (최근 연락 순):', sortedRooms);
+      console.log('🔵 정렬 기준: lastMessageTime (최근 메시지 시간)');
+      setChatRooms(sortedRooms);
 
     } catch (error) {
       console.error('❌ 채팅방 목록 로드 오류:', error);
@@ -143,9 +161,26 @@ const Chatlist = () => {
   // 사용자의 온라인 상태 확인
   const getUserOnlineStatus = (userId) => {
     if (userId === currentUser?.id) {
+      console.log('🔵 현재 사용자 온라인 상태:', userId, true);
       return { is_online: true }; // 현재 사용자는 항상 온라인으로 표시
     }
-    return onlineUsers.get(userId) || { is_online: false };
+    
+    const userStatus = onlineUsers.get(userId);
+    console.log('🔵 사용자 온라인 상태 조회:', userId, userStatus);
+    
+    if (userStatus) {
+      // Supabase에서 가져온 정확한 온라인 상태 반환
+      const status = {
+        is_online: userStatus.is_online,
+        last_seen: userStatus.last_seen,
+        updated_at: userStatus.updated_at
+      };
+      console.log('🔵 반환할 온라인 상태:', status);
+      return status;
+    }
+    
+    console.log('🔵 온라인 상태 없음, 기본값 false 반환:', userId);
+    return { is_online: false };
   };
 
   // 컴포넌트 마운트 시 데이터 로드
@@ -195,6 +230,8 @@ const Chatlist = () => {
 
     let unsubscribeStatusChange;
 
+    let onlineStatusChannel;
+
     const initializeOnlineStatus = async () => {
       try {
         // 온라인 상태 매니저 초기화
@@ -205,6 +242,57 @@ const Chatlist = () => {
           const newOnlineUsers = new Map(statusEntries);
           setOnlineUsers(newOnlineUsers);
         });
+
+        // Supabase 실시간 온라인 상태 구독
+        onlineStatusChannel = supabase
+          .channel('online-status-updates')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'user_online_status'
+            },
+            (payload) => {
+              console.log('🔵 실시간 온라인 상태 변경:', payload);
+              
+              if (payload.new) {
+                const { user_id, is_online, last_seen } = payload.new;
+                setOnlineUsers(prev => {
+                  const newMap = new Map(prev);
+                  newMap.set(user_id, { 
+                    is_online, 
+                    last_seen,
+                    updated_at: new Date().toISOString()
+                  });
+                  return newMap;
+                });
+              }
+            }
+          )
+          .subscribe();
+
+        // 초기 온라인 상태 데이터 로드
+        const { data: initialOnlineStatus, error } = await supabase
+          .from('user_online_status')
+          .select('user_id, is_online, last_seen, updated_at');
+
+        if (error) {
+          console.error('❌ 초기 온라인 상태 로드 오류:', error);
+        } else {
+          console.log('🔵 초기 온라인 상태 로드:', initialOnlineStatus);
+          const initialOnlineUsers = new Map();
+          initialOnlineStatus?.forEach(status => {
+            console.log('🔵 온라인 상태 설정:', status.user_id, status.is_online);
+            initialOnlineUsers.set(status.user_id, {
+              is_online: status.is_online,
+              last_seen: status.last_seen,
+              updated_at: status.updated_at
+            });
+          });
+          console.log('🔵 최종 온라인 사용자 Map:', initialOnlineUsers);
+          setOnlineUsers(initialOnlineUsers);
+        }
       } catch (error) {
         console.error('❌ Chatlist - 온라인 상태 초기화 오류:', error);
       }
@@ -215,6 +303,9 @@ const Chatlist = () => {
     return () => {
       if (unsubscribeStatusChange) {
         unsubscribeStatusChange();
+      }
+      if (onlineStatusChannel) {
+        supabase.removeChannel(onlineStatusChannel);
       }
       // cleanup은 호출하지 않음 (싱글톤이므로 다른 페이지에서도 사용 중)
     };
@@ -252,6 +343,16 @@ const Chatlist = () => {
       supabase.removeChannel(channel);
     };
   }, [currentUser, loadChatRooms]);
+
+  // 시간 표시 실시간 업데이트 (1분마다)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // 강제로 리렌더링을 위해 상태 업데이트
+      setChatRooms(prev => [...prev]);
+    }, 60000); // 1분마다 업데이트
+
+    return () => clearInterval(interval);
+  }, []);
 
   // 전역 클릭 이벤트로 스와이프 닫기
   useEffect(() => {
@@ -418,27 +519,49 @@ const Chatlist = () => {
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return '';
+    
+    // UTC 시간을 한국 시간(KST, UTC+9)으로 변환
     const date = new Date(dateString);
+    const koreanTime = new Date(date.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
     const now = new Date();
-    const diff = now - date;
+    const nowKorean = new Date(now.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
+    const diff = nowKorean - koreanTime;
 
-    // 24시간 이내
-    if (diff < 24 * 60 * 60 * 1000) {
-      return date.toLocaleTimeString('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      });
+    let result = '';
+
+    // 1분 미만
+    if (diff < 60 * 1000) {
+      result = '방금 전';
     }
-    // 일주일 이내
-    if (diff < 7 * 24 * 60 * 60 * 1000) {
-      return ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
+    // 1-59분
+    else if (diff < 60 * 60 * 1000) {
+      const minutes = Math.floor(diff / (60 * 1000));
+      result = `${minutes}분 전`;
     }
-    // 그 외
-    return date.toLocaleDateString('ko-KR', {
-      month: 'short',
-      day: 'numeric'
-    });
+    // 1-23시간
+    else if (diff < 24 * 60 * 60 * 1000) {
+      const hours = Math.floor(diff / (60 * 60 * 1000));
+      result = `${hours}시간 전`;
+    }
+    // 1-30일
+    else if (diff < 30 * 24 * 60 * 60 * 1000) {
+      const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+      result = `${days}일 전`;
+    }
+    // 1-12개월
+    else if (diff < 365 * 24 * 60 * 60 * 1000) {
+      const months = Math.floor(diff / (30 * 24 * 60 * 60 * 1000));
+      result = `${months}개월 전`;
+    }
+    // 1년 이상
+    else {
+      const years = Math.floor(diff / (365 * 24 * 60 * 60 * 1000));
+      result = `${years}년 전`;
+    }
+
+    console.log('🔵 시간 포맷팅 (한국시간):', dateString, '→', result, `(${Math.floor(diff / 1000)}초 전)`);
+    return result;
   };
 
   if (loading) {
@@ -479,7 +602,10 @@ const Chatlist = () => {
                 >
                   <ProfileSection>
                     <ProfileImage src={chat.profileImage} alt={chat.nickname} />
-                    <OnlineIndicator $isOnline={getUserOnlineStatus(chat.userId).is_online} />
+                    <OnlineIndicator 
+                      $isOnline={getUserOnlineStatus(chat.userId).is_online}
+                      title={`${chat.nickname} - ${getUserOnlineStatus(chat.userId).is_online ? '온라인' : '오프라인'}`}
+                    />
                   </ProfileSection>
                   <ChatInfo>
                     <ChatHeader>
@@ -578,22 +704,25 @@ const ProfileImage = styled.img`
 
 const OnlineIndicator = styled.div`
   position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 14px;
-  height: 14px;
+  bottom: 1px;
+  right: 1px;
+  width: 16px;
+  height: 16px;
   background-color: ${props => props.$isOnline ? '#4CAF50' : '#9E9E9E'};
-  border: 2px solid #ffffff;
+  border: 3px solid #ffffff;
   border-radius: 50%;
-  box-shadow: 0 2px 4px ${props => props.$isOnline ? 'rgba(76, 175, 80, 0.3)' : 'rgba(158, 158, 158, 0.3)'};
+  box-shadow: 0 2px 6px ${props => props.$isOnline ? 'rgba(76, 175, 80, 0.4)' : 'rgba(158, 158, 158, 0.4)'};
   animation: ${props => props.$isOnline ? 'pulse-online' : 'none'} 2s ease-in-out infinite;
+  z-index: 10;
 
   @keyframes pulse-online {
     0%, 100% {
-      box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+      box-shadow: 0 2px 6px rgba(76, 175, 80, 0.4);
+      transform: scale(1);
     }
     50% {
-      box-shadow: 0 2px 8px rgba(76, 175, 80, 0.6);
+      box-shadow: 0 2px 12px rgba(76, 175, 80, 0.7);
+      transform: scale(1.1);
     }
   }
 `;

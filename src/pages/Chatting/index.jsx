@@ -375,17 +375,20 @@ const Chatting = () => {
 
       console.log('🔵 메시지 개수:', messagesData.length);
 
-      // 2. 현재 사용자가 숨긴 메시지 조회
-      const { data: hiddenMessagesData, error: hiddenError } = await supabase
-        .from('hidden_messages')
-        .select('message_id')
-        .eq('user_id', currentUser?.id);
+      // 2. 현재 사용자가 숨긴 메시지 조회 (currentUser가 존재할 때만)
+      let hiddenMessageIds = new Set();
+      if (currentUser?.id) {
+        const { data: hiddenMessagesData, error: hiddenError } = await supabase
+          .from('hidden_messages')
+          .select('message_id')
+          .eq('user_id', currentUser.id);
 
-      if (hiddenError) {
-        console.warn('⚠️ 숨겨진 메시지 조회 실패:', hiddenError);
+        if (hiddenError) {
+          console.warn('⚠️ 숨겨진 메시지 조회 실패:', hiddenError);
+        } else {
+          hiddenMessageIds = new Set(hiddenMessagesData?.map(h => h.message_id) || []);
+        }
       }
-
-      const hiddenMessageIds = new Set(hiddenMessagesData?.map(h => h.message_id) || []);
       console.log('🔵 숨겨진 메시지 ID들:', hiddenMessageIds);
 
       // 3. 숨겨진 메시지 필터링
@@ -682,36 +685,68 @@ const Chatting = () => {
   };
 
   const formatTime = (timestamp) => {
+    // UTC 시간을 한국 시간(KST, UTC+9)으로 변환
     const date = new Date(timestamp);
+    const koreanTime = new Date(date.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
     const now = new Date();
-    const diffInHours = (now - date) / (1000 * 60 * 60);
+    const nowKorean = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    const diffInHours = (nowKorean - koreanTime) / (1000 * 60 * 60);
     
     if (diffInHours < 24) {
       // 오늘: 오전/오후 시간:분
-      const hours = date.getHours();
-      const minutes = date.getMinutes().toString().padStart(2, '0');
+      const hours = koreanTime.getHours();
+      const minutes = koreanTime.getMinutes().toString().padStart(2, '0');
       const ampm = hours >= 12 ? '오후' : '오전';
       const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
       return `${ampm} ${displayHours}:${minutes}`;
     } else if (diffInHours < 24 * 7) {
       // 이번 주: 요일
       const days = ['일', '월', '화', '수', '목', '금', '토'];
-      return days[date.getDay()];
+      return days[koreanTime.getDay()];
     } else {
       // 그 외: 월/일
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const day = date.getDate().toString().padStart(2, '0');
+      const month = (koreanTime.getMonth() + 1).toString().padStart(2, '0');
+      const day = koreanTime.getDate().toString().padStart(2, '0');
       return `${month}/${day}`;
     }
   };
 
-  const formatFullTime = (timestamp) => {
+  // 날짜 구분선을 위한 함수
+  const formatDateSeparator = (timestamp) => {
+    // UTC 시간을 한국 시간(KST, UTC+9)으로 변환
     const date = new Date(timestamp);
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const hours = date.getHours();
-    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const koreanTime = new Date(date.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
+    const year = koreanTime.getFullYear();
+    const month = koreanTime.getMonth() + 1;
+    const day = koreanTime.getDate();
+    
+    return `${year}년 ${month}월 ${day}일`;
+  };
+
+  // 날짜가 다른지 확인하는 함수
+  const isDifferentDate = (date1, date2) => {
+    if (!date1 || !date2) return true;
+    
+    // UTC 시간을 한국 시간(KST, UTC+9)으로 변환
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    const koreanTime1 = new Date(d1.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
+    const koreanTime2 = new Date(d2.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
+    
+    return koreanTime1.getFullYear() !== koreanTime2.getFullYear() ||
+           koreanTime1.getMonth() !== koreanTime2.getMonth() ||
+           koreanTime1.getDate() !== koreanTime2.getDate();
+  };
+
+  const formatFullTime = (timestamp) => {
+    // UTC 시간을 한국 시간(KST, UTC+9)으로 변환
+    const date = new Date(timestamp);
+    const koreanTime = new Date(date.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
+    const year = koreanTime.getFullYear();
+    const month = (koreanTime.getMonth() + 1).toString().padStart(2, '0');
+    const day = koreanTime.getDate().toString().padStart(2, '0');
+    const hours = koreanTime.getHours();
+    const minutes = koreanTime.getMinutes().toString().padStart(2, '0');
     const ampm = hours >= 12 ? '오후' : '오전';
     const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
     return `${year}.${month}.${day} ${ampm} ${displayHours}:${minutes}`;
@@ -758,6 +793,13 @@ const Chatting = () => {
               formatTime(prevMsg.created_at) !== formatTime(msg.created_at) ||
               prevMsg.user_id === currentUser?.id
             );
+
+            // 날짜 구분선 표시 여부 확인
+            const showDateSeparator = index === 0 || isDifferentDate(msg.created_at, prevMsg?.created_at);
+            
+            if (showDateSeparator) {
+              console.log('🔵 날짜 구분선 표시:', formatDateSeparator(msg.created_at), '메시지:', msg.content);
+            }
             
             // 같은 시간대의 첫 번째 메시지인지 확인 (프로필 이미지와 시간 표시용)
             const showTimeAndProfile = !isOwn && (!prevMsg ||
@@ -774,58 +816,74 @@ const Chatting = () => {
             );
 
             return (
-              <MessageWrapper key={msg.id} $isOwn={isOwn}>
-                {!isOwn && (
-                  <MessageGroup>
-                    {showTimeAndProfile ? (
-                      <ProfileImageWrapper>
-                        {senderImage ? (
-                          <ProfileImage src={senderImage} alt={senderName} />
-                        ) : (
-                          <ProfileImagePlaceholder>
-                            <LoadingSpinner />
-                          </ProfileImagePlaceholder>
-                        )}
-                      </ProfileImageWrapper>
-                    ) : (
-                      <ProfileImagePlaceholder />
+              <React.Fragment key={msg.id}>
+                {/* 날짜 구분선 */}
+                {showDateSeparator && (
+                  <DateSeparator>
+                    <DateSeparatorText>{formatDateSeparator(msg.created_at)}</DateSeparatorText>
+                  </DateSeparator>
+                )}
+                
+                <MessageWrapper $isOwn={isOwn}>
+                  {!isOwn && (
+                  <OpponentMessageContainer>
+                    <MessageGroup>
+                      {showTimeAndProfile ? (
+                        <ProfileImageWrapper>
+                          {senderImage ? (
+                            <ProfileImage src={senderImage} alt={senderName} />
+                          ) : (
+                            <ProfileImagePlaceholder>
+                              <LoadingSpinner />
+                            </ProfileImagePlaceholder>
+                          )}
+                        </ProfileImageWrapper>
+                      ) : (
+                        <ProfileImagePlaceholder />
+                      )}
+                      <MessageContent>
+                        {showTimeAndProfile && <SenderName>{senderName}</SenderName>}
+                        <MessageBubble 
+                          data-message-bubble={msg.id}
+                          $isOwn={isOwn} 
+                          $isSelected={selectedMessageId === msg.id}
+                          title={formatFullTime(msg.created_at)}
+                          onMouseDown={() => handleMessagePressStart(msg.id, isOwn)}
+                          onMouseUp={handleMessagePressEnd}
+                          onMouseLeave={handleMessagePressEnd}
+                          onTouchStart={() => handleMessagePressStart(msg.id, isOwn)}
+                          onTouchEnd={handleMessagePressEnd}
+                          onClick={handleMessageClick}
+                        >
+                          <MessageText>{msg.content}</MessageText>
+                        </MessageBubble>
+                      </MessageContent>
+                    </MessageGroup>
+                    {showTimeAndProfile && (
+                      <OpponentMessageTime>{formatTime(msg.created_at)}</OpponentMessageTime>
                     )}
-                    <MessageContent>
-                      {showTimeAndProfile && <SenderName>{senderName}</SenderName>}
-                      <MessageBubble 
-                        data-message-bubble={msg.id}
-                        $isOwn={isOwn} 
-                        $isSelected={selectedMessageId === msg.id}
-                        title={formatFullTime(msg.created_at)}
-                        onMouseDown={() => handleMessagePressStart(msg.id, isOwn)}
-                        onMouseUp={handleMessagePressEnd}
-                        onMouseLeave={handleMessagePressEnd}
-                        onTouchStart={() => handleMessagePressStart(msg.id, isOwn)}
-                        onTouchEnd={handleMessagePressEnd}
-                        onClick={handleMessageClick}
-                      >
-                        <MessageText>{msg.content}</MessageText>
-                        {showTimeAndProfile && <MessageTime>{formatTime(msg.created_at)}</MessageTime>}
-                      </MessageBubble>
-                    </MessageContent>
-                  </MessageGroup>
+                  </OpponentMessageContainer>
                 )}
                 {isOwn && (
-                  <MessageBubble 
-                    data-message-bubble={msg.id}
-                    $isOwn={isOwn} 
-                    $isSelected={selectedMessageId === msg.id}
-                    title={formatFullTime(msg.created_at)}
-                    onMouseDown={() => handleMessagePressStart(msg.id, isOwn)}
-                    onMouseUp={handleMessagePressEnd}
-                    onMouseLeave={handleMessagePressEnd}
-                    onTouchStart={() => handleMessagePressStart(msg.id, isOwn)}
-                    onTouchEnd={handleMessagePressEnd}
-                    onClick={handleMessageClick}
-                  >
-                    <MessageText>{msg.content}</MessageText>
-                    {showMyMessageTime && <MessageTime>{formatTime(msg.created_at)}</MessageTime>}
-                  </MessageBubble>
+                  <OwnMessageContainer>
+                    {showMyMessageTime && (
+                      <OwnMessageTime>{formatTime(msg.created_at)}</OwnMessageTime>
+                    )}
+                    <MessageBubble 
+                      data-message-bubble={msg.id}
+                      $isOwn={isOwn} 
+                      $isSelected={selectedMessageId === msg.id}
+                      title={formatFullTime(msg.created_at)}
+                      onMouseDown={() => handleMessagePressStart(msg.id, isOwn)}
+                      onMouseUp={handleMessagePressEnd}
+                      onMouseLeave={handleMessagePressEnd}
+                      onTouchStart={() => handleMessagePressStart(msg.id, isOwn)}
+                      onTouchEnd={handleMessagePressEnd}
+                      onClick={handleMessageClick}
+                    >
+                      <MessageText>{msg.content}</MessageText>
+                    </MessageBubble>
+                  </OwnMessageContainer>
                 )}
                 
                 {/* 삭제/숨기기 버튼 */}
@@ -840,7 +898,8 @@ const Chatting = () => {
                     </DeleteButton>
                   </DeleteButtonContainer>
                 )}
-              </MessageWrapper>
+                </MessageWrapper>
+              </React.Fragment>
             );
           })
         )}
@@ -966,11 +1025,71 @@ const EmptyMessage = styled.div`
   color: var(--text-light);
 `;
 
+const DateSeparator = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background-color: #e0e0e0;
+    z-index: 1;
+  }
+`;
+
+const DateSeparatorText = styled.span`
+  background-color: #f8f9fa;
+  color: #666;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 12px;
+  border: 1px solid #e0e0e0;
+  z-index: 2;
+  position: relative;
+`;
+
 const MessageWrapper = styled.div`
   display: flex;
   flex-direction: column;
   align-items: ${props => props.$isOwn ? 'flex-end' : 'flex-start'};
   margin-bottom: 4px;
+`;
+
+const OwnMessageContainer = styled.div`
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 4px;
+  justify-content: flex-end;
+`;
+
+const OwnMessageTime = styled.span`
+  font-size: 11px;
+  color: #8e8e8e;
+  white-space: nowrap;
+  margin-bottom: 2px;
+`;
+
+const OpponentMessageContainer = styled.div`
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 4px;
+`;
+
+const OpponentMessageTime = styled.span`
+  font-size: 11px;
+  color: #8e8e8e;
+  white-space: nowrap;
+  margin-bottom: 2px;
 `;
 
 const MessageGroup = styled.div`

@@ -19,6 +19,27 @@ const Chatlist = () => {
   const touchStartY = useRef(0);
   const isDragging = useRef(false);
 
+  // 채팅방 정렬 함수 (최신순)
+  const sortChatRoomsByLatestMessage = useCallback((rooms) => {
+    return rooms.sort((a, b) => {
+      // lastMessageDate가 있는 경우 해당 시간으로 정렬
+      if (a.lastMessageDate && b.lastMessageDate) {
+        const dateA = new Date(a.lastMessageDate);
+        const dateB = new Date(b.lastMessageDate);
+        return dateB - dateA; // 최신순 (내림차순)
+      }
+      // lastMessageDate가 없는 경우 (메시지가 없는 채팅방)
+      if (a.lastMessageDate && !b.lastMessageDate) {
+        return -1; // a가 더 최근 (메시지가 있는 것이 위로)
+      }
+      if (!a.lastMessageDate && b.lastMessageDate) {
+        return 1; // b가 더 최근 (메시지가 있는 것이 위로)
+      }
+      // 둘 다 메시지가 없는 경우는 순서 유지
+      return 0;
+    });
+  }, []);
+
   const loadChatRooms = useCallback(async () => {
     console.log('🔵 loadChatRooms 시작');
 
@@ -127,26 +148,19 @@ const Chatlist = () => {
 
       // null 값 제거
       const validRooms = roomsData.filter(room => room !== null);
+      console.log('🔵 유효한 채팅방 개수:', validRooms.length);
 
-      // 가장 최근에 연락한 채팅방이 위에 오도록 정렬
-      const sortedRooms = validRooms.sort((a, b) => {
-        // lastMessageTime이 있는 경우 해당 시간으로 정렬
-        if (a.lastMessageTime && b.lastMessageTime) {
-          return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
-        }
-        // lastMessageTime이 없는 경우 created_at으로 정렬
-        if (a.lastMessageTime && !b.lastMessageTime) {
-          return -1; // a가 더 최근
-        }
-        if (!a.lastMessageTime && b.lastMessageTime) {
-          return 1; // b가 더 최근
-        }
-        // 둘 다 lastMessageTime이 없는 경우 created_at으로 정렬
-        return new Date(b.created_at) - new Date(a.created_at);
+      // 최신순으로 정렬 (마지막 메시지 시간 기준)
+      const sortedRooms = sortChatRoomsByLatestMessage([...validRooms]);
+
+      console.log('🔵 정렬된 채팅방 목록 (최신순):', sortedRooms);
+      console.log('🔵 정렬 기준: lastMessageDate (최근 메시지 시간 기준 최신순)');
+      
+      // 정렬 결과 로깅 (디버깅용)
+      sortedRooms.forEach((room, index) => {
+        console.log(`   ${index + 1}. ${room.nickname} - ${room.lastMessageDate || '메시지 없음'}`);
       });
-
-      console.log('🔵 정렬된 채팅방 목록 (최근 연락 순):', sortedRooms);
-      console.log('🔵 정렬 기준: lastMessageTime (최근 메시지 시간)');
+      
       setChatRooms(sortedRooms);
 
     } catch (error) {
@@ -188,6 +202,7 @@ const Chatlist = () => {
     console.log('🔵 Chatlist useEffect 실행');
     loadChatRooms();
   }, [loadChatRooms]);
+
 
   // localStorage 변경 감지 (로그아웃/로그인 시)
   useEffect(() => {

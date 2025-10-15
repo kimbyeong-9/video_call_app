@@ -3,9 +3,53 @@ import Router from './routes/Router';
 import styled from 'styled-components';
 import { handleAuthStateChange, supabase } from './utils/supabase';
 import { UnreadMessagesProvider } from './contexts/UnreadMessagesContext';
+import { NotificationProvider, useNotifications } from './contexts/NotificationContext';
+import MessageNotification from './components/common/MessageNotification';
 
 // Context 생성: 현재 사용자 ID를 전역으로 공유
 export const CurrentUserContext = createContext(null);
+
+// 전역 알림 컴포넌트
+const GlobalNotificationWrapper = () => {
+  const { 
+    notifications, 
+    setUser, 
+    startMessageNotificationSubscription, 
+    stopMessageNotificationSubscription,
+    handleNotificationClick,
+    removeNotification 
+  } = useNotifications();
+
+  useEffect(() => {
+    // localStorage에서 사용자 정보 가져오기
+    const storedUser = localStorage.getItem('currentUser');
+    
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser);
+        console.log('🔔 전역 알림 시스템 초기화:', user.nickname);
+        setUser(user);
+        
+        // 전역 메시지 알림 구독 시작
+        const notificationChannel = startMessageNotificationSubscription();
+        
+        return () => {
+          stopMessageNotificationSubscription(notificationChannel);
+        };
+      } catch (error) {
+        console.error('❌ 사용자 정보 파싱 오류:', error);
+      }
+    }
+  }, [setUser, startMessageNotificationSubscription, stopMessageNotificationSubscription]);
+
+  return (
+    <MessageNotification
+      notifications={notifications}
+      onClose={removeNotification}
+      onClick={handleNotificationClick}
+    />
+  );
+};
 
 function App() {
   const [currentUserId, setCurrentUserId] = useState(null);
@@ -98,9 +142,12 @@ function App() {
   return (
     <CurrentUserContext.Provider value={currentUserId}>
       <UnreadMessagesProvider>
-        <AppContainer>
-          <Router />
-        </AppContainer>
+        <NotificationProvider>
+          <AppContainer>
+            <Router />
+          </AppContainer>
+          <GlobalNotificationWrapper />
+        </NotificationProvider>
       </UnreadMessagesProvider>
     </CurrentUserContext.Provider>
   );

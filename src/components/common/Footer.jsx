@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import HouseIcon from '../../assets/images/house_17996174.png';
 import PersonIcon from '../../assets/images/person_6797008.png';
 import DialogueIcon from '../../assets/images/dialogue-bubble_17603703.png';
-import SearchIcon from '../../assets/images/search_18292397.png';
+import SearchIcon from '../../assets/images/montenegro_15541433.png';
 
 const Footer = () => {
   const navigate = useNavigate();
@@ -14,7 +14,7 @@ const Footer = () => {
     { path: '/', label: '홈', icon: 'house', isImage: true },
     { path: '/friends', label: '친구목록', icon: 'person', isImage: true },
     { path: '/chatlist', label: '채팅', icon: 'dialogue', isImage: true },
-    { path: '/search', label: '검색', icon: 'search', isImage: true }
+    { path: '/profiles/me', label: '검색', icon: 'search', isImage: true }
   ];
 
   return (

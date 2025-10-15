@@ -53,9 +53,33 @@ const VideoCall = () => {
 
   // 원격 비디오 설정
   useEffect(() => {
+    console.log('🔵 [VideoCall] 원격 스트림 상태 변경:', remoteStream);
     if (remoteStream && remoteVideoRef.current) {
+      console.log('🔵 [VideoCall] 원격 비디오 설정 시작');
+      console.log('   - Stream Tracks:', remoteStream.getTracks().length);
+      console.log('   - Video Tracks:', remoteStream.getVideoTracks().length);
+      console.log('   - Audio Tracks:', remoteStream.getAudioTracks().length);
+      
       remoteVideoRef.current.srcObject = remoteStream;
       setCallStatus('통화 중');
+      
+      // 비디오 로드 이벤트 리스너 추가
+      remoteVideoRef.current.onloadedmetadata = () => {
+        console.log('✅ [VideoCall] 원격 비디오 메타데이터 로드 완료');
+        remoteVideoRef.current.play().catch(error => {
+          console.error('❌ [VideoCall] 원격 비디오 재생 실패:', error);
+        });
+      };
+      
+      remoteVideoRef.current.onplay = () => {
+        console.log('✅ [VideoCall] 원격 비디오 재생 시작');
+      };
+      
+      remoteVideoRef.current.onerror = (error) => {
+        console.error('❌ [VideoCall] 원격 비디오 에러:', error);
+      };
+      
+      console.log('✅ [VideoCall] 원격 비디오 설정 완료');
     }
   }, [remoteStream]);
 
@@ -124,7 +148,9 @@ const VideoCall = () => {
       console.log('🔵 [VideoCall] PeerConnection 초기화...');
       webrtcManagerRef.current.initPeerConnection(
         (remoteStream) => {
-          console.log('🎉 [VideoCall] 원격 스트림 수신!');
+          console.log('🎉 [VideoCall] 원격 스트림 수신 콜백 호출!');
+          console.log('   - 수신된 스트림:', remoteStream);
+          console.log('   - 스트림 Tracks:', remoteStream?.getTracks()?.length || 0);
           setRemoteStream(remoteStream);
         },
         (state) => {
@@ -133,6 +159,8 @@ const VideoCall = () => {
           if (state === 'connected') {
             setCallStatus('통화 중');
             videoCall.updateCallStatus(callId, 'active');
+          } else if (state === 'connecting') {
+            setCallStatus('연결 중...');
           } else if (state === 'disconnected' || state === 'failed') {
             setCallStatus('연결 끊김');
           }
@@ -274,6 +302,9 @@ const VideoCall = () => {
             <PlaceholderText>
               {callerInfo ? `${callerInfo.nickname}님과 연결 중...` : callStatus}
             </PlaceholderText>
+            <div style={{ color: '#888', fontSize: '14px', marginTop: '10px' }}>
+              연결 상태: {connectionState}
+            </div>
           </PlaceholderBox>
         )}
 

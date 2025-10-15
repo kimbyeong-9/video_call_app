@@ -503,10 +503,20 @@ export class WebRTCManager {
     // 기존 PeerConnection이 있다면 정리
     if (this.peerConnection) {
       console.log('🔵 [WebRTC] 기존 PeerConnection 정리');
+      console.log('   기존 상태:', this.peerConnection.signalingState);
+      console.log('   기존 연결 상태:', this.peerConnection.connectionState);
       this.peerConnection.close();
     }
     
     this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+    
+    // 초기 상태 확인
+    console.log('🔵 [WebRTC] 새 PeerConnection 생성 완료');
+    console.log('   초기 상태:', this.peerConnection.signalingState);
+    console.log('   초기 연결 상태:', this.peerConnection.connectionState);
+    
+    // 상태 큐 초기화
+    this.pendingIceCandidates = [];
 
     // 로컬 스트림 추가
     if (this.localStream) {
@@ -519,18 +529,34 @@ export class WebRTCManager {
 
     // 원격 스트림 수신
     this.peerConnection.ontrack = (event) => {
-      console.log('🎉 [WebRTC] 원격 스트림 수신!', event.streams.length, 'streams');
+      console.log('🎉 [WebRTC] 원격 스트림 수신!');
+      console.log('   - Streams 개수:', event.streams.length);
+      console.log('   - Track 개수:', event.track ? 1 : 0);
+      console.log('   - Track 종류:', event.track?.kind);
+      console.log('   - Track 상태:', event.track?.readyState);
       
       if (!this.remoteStream) {
         this.remoteStream = new MediaStream();
+        console.log('🔵 [WebRTC] 새 원격 스트림 생성');
       }
       
-      event.streams[0].getTracks().forEach(track => {
-        console.log('🔵 [WebRTC] 원격 Track 추가:', track.kind, track.label);
-        this.remoteStream.addTrack(track);
-      });
+      // event.streams가 있는 경우 (일반적인 경우)
+      if (event.streams && event.streams.length > 0) {
+        console.log('🔵 [WebRTC] Streams에서 Track 추출');
+        event.streams[0].getTracks().forEach(track => {
+          console.log('🔵 [WebRTC] 원격 Track 추가:', track.kind, track.label, track.readyState);
+          this.remoteStream.addTrack(track);
+        });
+      }
+      // event.streams가 없는 경우 (일부 브라우저)
+      else if (event.track) {
+        console.log('🔵 [WebRTC] Event에서 직접 Track 추출');
+        console.log('🔵 [WebRTC] 원격 Track 추가:', event.track.kind, event.track.label, event.track.readyState);
+        this.remoteStream.addTrack(event.track);
+      }
       
       console.log('✅ [WebRTC] 원격 스트림 콜백 호출');
+      console.log('   - 현재 원격 스트림 Track 수:', this.remoteStream.getTracks().length);
       onRemoteStream?.(this.remoteStream);
     };
 
@@ -551,11 +577,14 @@ export class WebRTCManager {
     // ICE 연결 상태 변경
     this.peerConnection.oniceconnectionstatechange = () => {
       console.log('🔵 [WebRTC] ICE 연결 상태:', this.peerConnection.iceConnectionState);
+      console.log('   - ICE gathering 상태:', this.peerConnection.iceGatheringState);
     };
 
     // 연결 상태 변경
     this.peerConnection.onconnectionstatechange = () => {
       console.log('🔵 [WebRTC] PeerConnection 상태:', this.peerConnection.connectionState);
+      console.log('   - Signaling 상태:', this.peerConnection.signalingState);
+      console.log('   - ICE 연결 상태:', this.peerConnection.iceConnectionState);
       onConnectionStateChange?.(this.peerConnection.connectionState);
     };
 
@@ -601,12 +630,30 @@ export class WebRTCManager {
   async createAnswer(offerSdp) {
     try {
       console.log('🔵 [WebRTC] Answer 생성 시작');
+      console.log('🔵 [WebRTC] PeerConnection 현재 상태:', this.peerConnection.signalingState);
       console.log('🔵 [WebRTC] Remote Offer 수신:', offerSdp.type);
+
+      // PeerConnection 상태 검증
+      if (this.peerConnection.signalingState !== 'stable') {
+        console.warn('⚠️ [WebRTC] Answer 생성 중단 - 잘못된 상태:', this.peerConnection.signalingState);
+        console.warn('   (Answer는 stable 상태에서만 생성 가능)');
+        return null;
+      }
+
+      // 이미 remoteDescription이 설정되어 있다면 중복 처리 방지
+      if (this.peerConnection.remoteDescription) {
+        console.warn('⚠️ [WebRTC] Answer 생성 중단 - 이미 remoteDescription이 설정됨');
+        console.warn('   현재 상태:', this.peerConnection.signalingState);
+        return null;
+      }
 
       await this.peerConnection.setRemoteDescription(
         new RTCSessionDescription(offerSdp)
       );
       console.log('🔵 [WebRTC] Remote Description 설정 완료');
+
+      // setRemoteDescription 후 상태 확인
+      console.log('🔵 [WebRTC] Remote Description 설정 후 상태:', this.peerConnection.signalingState);
 
       const answer = await this.peerConnection.createAnswer({
         offerToReceiveAudio: true,
@@ -626,6 +673,16 @@ export class WebRTCManager {
       return answer;
     } catch (error) {
       console.error('❌ [WebRTC] Answer 생성 실패:', error);
+      console.error('   PeerConnection 상태:', this.peerConnection.signalingState);
+      console.error('   remoteDescription 존재:', !!this.peerConnection.remoteDescription);
+      console.error('   localDescription 존재:', !!this.peerConnection.localDescription);
+      
+      // 상태 충돌 에러인 경우 무시
+      if (error.name === 'InvalidStateError') {
+        console.warn('⚠️ [WebRTC] 상태 충돌로 인한 Answer 생성 실패 - 무시');
+        return null;
+      }
+      
       throw error;
     }
   }
@@ -807,14 +864,21 @@ export class WebRTCManager {
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           console.log('📞 [WebRTC.onOffer] Offer 수신!');
           console.log('   Offer SDP:', offerSdp);
+          console.log('   현재 PeerConnection 상태:', this.peerConnection?.signalingState);
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
           try {
-            await this.createAnswer(offerSdp);
-            callbacks.onOffer?.(offerSdp);
-            console.log('✅ [WebRTC.onOffer] Answer 생성 및 전송 완료');
+            const answer = await this.createAnswer(offerSdp);
+            if (answer) {
+              callbacks.onOffer?.(offerSdp);
+              console.log('✅ [WebRTC.onOffer] Answer 생성 및 전송 완료');
+            } else {
+              console.warn('⚠️ [WebRTC.onOffer] Answer 생성 건너뛰기 - 상태 충돌 또는 중복 처리');
+            }
           } catch (error) {
             console.error('❌ [WebRTC.onOffer] Answer 생성 실패:', error);
+            // 에러가 발생해도 콜백은 호출 (UI 업데이트를 위해)
+            callbacks.onOffer?.(offerSdp);
           }
         },
         onAnswer: async (answerSdp) => {

@@ -16,7 +16,6 @@ import Chatlist from '../pages/Chatlist';
 import Chatting from '../pages/Chatting';
 import Auth from '../pages/Auth';
 import Friends from '../pages/Friends';
-import Search from '../pages/Search';
 import Recommend from '../pages/Recommend';
 import Mypage from '../pages/Profiles/Mypage';
 import UserProfile from '../pages/Profiles/UserProfile';
@@ -91,10 +90,6 @@ const AppRoutes = () => {
         {
           path: 'chatlist',
           element: <Chatlist />
-        },
-        {
-          path: 'search',
-          element: <Search />
         },
         {
           path: 'recommend',

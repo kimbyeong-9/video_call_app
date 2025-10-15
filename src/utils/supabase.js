@@ -8,7 +8,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'pkce'
+    flowType: 'pkce',
+    storage: window.localStorage,
+    storageKey: 'sb-auth-token',
+    debug: false
   },
   global: {
     headers: {
@@ -106,8 +109,22 @@ export const auth = {
 
   // 현재 사용자 가져오기
   getCurrentUser: async () => {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    return { user, error };
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      // Refresh Token 오류 시 자동 복구
+      if (error && error.message?.includes('refresh_token_not_found')) {
+        console.warn('⚠️ Refresh Token 오류 감지, 세션 정리 중...');
+        await supabase.auth.signOut();
+        localStorage.removeItem('sb-auth-token');
+        return { user: null, error: new Error('세션이 만료되었습니다. 다시 로그인해주세요.') };
+      }
+      
+      return { user, error };
+    } catch (error) {
+      console.error('사용자 정보 조회 에러:', error);
+      return { user: null, error };
+    }
   },
 
   // Google 로그인
@@ -259,6 +276,14 @@ export const handleAuthStateChange = async (callback) => {
   try {
     const { data } = await supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth 이벤트:', event);  // 이벤트 로깅
+      
+      // Refresh Token 오류 처리
+      if (event === 'TOKEN_REFRESHED' && !session) {
+        console.warn('⚠️ 토큰 갱신 실패, 로그아웃 처리');
+        await supabase.auth.signOut();
+        localStorage.removeItem('sb-auth-token');
+        return;
+      }
       
       // SIGNED_UP 이벤트 시에만 users 테이블에 저장
       if (event === 'SIGNED_UP' && session?.user) {

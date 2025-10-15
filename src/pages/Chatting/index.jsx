@@ -1181,6 +1181,9 @@ const MessageBubble = styled.div`
   cursor: pointer;
   transition: all 0.2s ease;
   user-select: none;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
   
   ${props => props.$isSelected && `
     transform: scale(1.02);
@@ -1198,6 +1201,9 @@ const MessageText = styled.p`
   font-size: 15px;
   line-height: 1.4;
   word-wrap: break-word;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
 `;
 
 const MessageTime = styled.span`

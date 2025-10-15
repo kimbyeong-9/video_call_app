@@ -95,10 +95,13 @@ export const UnreadMessagesProvider = ({ children }) => {
 
   // 읽지 않은 메시지 수 초기화 (앱 시작 시)
   const initializeUnreadCounts = useCallback(async () => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id) {
+      console.warn('⚠️ initializeUnreadCounts: currentUser가 없습니다.');
+      return;
+    }
 
     try {
-      console.log('🔔 읽지 않은 메시지 수 초기화 시작');
+      console.log('🔔 읽지 않은 메시지 수 초기화 시작 - 사용자 ID:', currentUser.id);
       
       // 내가 참여한 모든 채팅방 조회
       const { data: participantsData, error: participantsError } = await supabase
@@ -117,6 +120,9 @@ export const UnreadMessagesProvider = ({ children }) => {
       for (const participant of participantsData) {
         const { room_id, last_read_at } = participant;
         
+        console.log(`🔔 채팅방 ${room_id} 읽지 않은 메시지 계산 시작`);
+        console.log(`   - last_read_at: ${last_read_at || '없음 (모든 메시지가 읽지 않음)'}`);
+        
         let unreadCount = 0;
 
         if (last_read_at) {
@@ -134,8 +140,11 @@ export const UnreadMessagesProvider = ({ children }) => {
           }
 
           unreadCount = unreadMessages?.length || 0;
+          console.log(`   - last_read_at 이후 메시지: ${unreadCount}개`);
         } else {
           // last_read_at이 없으면 모든 메시지를 읽지 않은 것으로 간주
+          console.log(`   - last_read_at이 없음 → 모든 메시지가 읽지 않은 것으로 처리`);
+          
           const { data: allMessages, error: messagesError } = await supabase
             .from('messages')
             .select('id')
@@ -148,10 +157,14 @@ export const UnreadMessagesProvider = ({ children }) => {
           }
 
           unreadCount = allMessages?.length || 0;
+          console.log(`   - 전체 메시지 (내 메시지 제외): ${unreadCount}개`);
         }
 
         if (unreadCount > 0) {
           unreadCounts[room_id] = unreadCount;
+          console.log(`   ✅ 채팅방 ${room_id}: 읽지 않은 메시지 ${unreadCount}개`);
+        } else {
+          console.log(`   ⭕ 채팅방 ${room_id}: 읽지 않은 메시지 없음`);
         }
       }
 
@@ -233,7 +246,7 @@ export const UnreadMessagesProvider = ({ children }) => {
       });
 
     return channel;
-  }, [currentUser?.id, incrementUnreadCount]);
+  }, [currentUser?.id, incrementUnreadCount, activeChatRoom]);
 
   // 읽지 않은 메시지 추적 해제
   const stopUnreadTracking = useCallback((channel) => {

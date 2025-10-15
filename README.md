@@ -19,6 +19,15 @@ WebRTC와 Supabase를 활용한 실시간 영상통화 앱입니다.
 - [🎥 영상통화](./docs/VIDEO_CALL_SETUP.md)
 - [🗄️ 데이터베이스](./docs/SUPABASE_RLS_FIX.md)
 
+## 🗄️ SQL Files
+
+데이터베이스 관련 SQL 파일들은 [`sql/`](./sql/) 폴더에 카테고리별로 정리되어 있습니다:
+- [📁 SQL 파일 구조](./sql/README.md)
+- [🚀 초기 설정](./sql/setup/) - 데이터베이스 초기 설정
+- [🔧 문제 해결](./sql/fixes/) - 기존 문제 수정
+- [📊 마이그레이션](./sql/migrations/) - 데이터베이스 변경사항
+- [🛠️ 유틸리티](./sql/utilities/) - 검증 및 통합 스크립트
+
 ## 📋 주요 기능
 
 ### 1. 사용자 인증

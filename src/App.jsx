@@ -32,28 +32,47 @@ const GlobalNotificationWrapper = () => {
     const storedUser = localStorage.getItem('currentUser');
     
     if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser);
-        console.log('🔔 전역 알림 시스템 초기화:', user.nickname);
-        setUser(user);
-        setUnreadUser(user);
-        
-        // 읽지 않은 메시지 수 초기화
-        initializeUnreadCounts();
-        
-        // 전역 메시지 알림 구독 시작
-        const notificationChannel = startMessageNotificationSubscription();
-        
-        // 읽지 않은 메시지 추적 시작
-        const unreadChannel = startUnreadTracking();
-        
-        return () => {
+      let notificationChannel = null;
+      let unreadChannel = null;
+      
+      const initializeUser = () => {
+        try {
+          const user = JSON.parse(storedUser);
+          console.log('🔔 전역 알림 시스템 초기화:', user.nickname);
+          setUser(user);
+          setUnreadUser(user);
+          
+          // 읽지 않은 메시지 수 초기화 (Promise로 처리) - 약간의 지연 후 실행
+          console.log('🔔 initializeUnreadCounts 호출 시작');
+          setTimeout(() => {
+            initializeUnreadCounts().then(() => {
+              console.log('✅ initializeUnreadCounts 완료');
+            }).catch(error => {
+              console.error('❌ 읽지 않은 메시지 초기화 실패:', error);
+            });
+          }, 100);
+          
+          // 전역 메시지 알림 구독 시작
+          notificationChannel = startMessageNotificationSubscription();
+          
+          // 읽지 않은 메시지 추적 시작
+          unreadChannel = startUnreadTracking();
+        } catch (error) {
+          console.error('❌ 사용자 정보 파싱 오류:', error);
+        }
+      };
+      
+      initializeUser();
+      
+      // cleanup 함수
+      return () => {
+        if (notificationChannel) {
           stopMessageNotificationSubscription(notificationChannel);
+        }
+        if (unreadChannel) {
           stopUnreadTracking(unreadChannel);
-        };
-      } catch (error) {
-        console.error('❌ 사용자 정보 파싱 오류:', error);
-      }
+        }
+      };
     }
   }, [setUser, setUnreadUser, initializeUnreadCounts, startMessageNotificationSubscription, stopMessageNotificationSubscription, startUnreadTracking, stopUnreadTracking]);
 

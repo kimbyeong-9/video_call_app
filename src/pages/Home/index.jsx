@@ -170,7 +170,18 @@ const Home = () => {
             .limit(6);
 
           if (users && !usersError) {
-            setRecommendedUsers(users);
+            // 테스트 계정을 가장 밑으로 정렬
+            const sortedUsers = users.sort((a, b) => {
+              const aIsTest = a.nickname.includes('테스트') || a.email.includes('test');
+              const bIsTest = b.nickname.includes('테스트') || b.email.includes('test');
+              
+              // 테스트 계정이 아닌 것을 먼저, 테스트 계정을 나중에
+              if (aIsTest && !bIsTest) return 1;
+              if (!aIsTest && bIsTest) return -1;
+              return 0;
+            });
+            
+            setRecommendedUsers(sortedUsers);
           }
         } else {
           setRecommendedUsers([]);

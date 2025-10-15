@@ -2,7 +2,7 @@ import React, { useEffect, useState, createContext } from 'react';
 import Router from './routes/Router';
 import styled from 'styled-components';
 import { handleAuthStateChange, supabase } from './utils/supabase';
-import { UnreadMessagesProvider } from './contexts/UnreadMessagesContext';
+import { UnreadMessagesProvider, useUnreadMessages } from './contexts/UnreadMessagesContext';
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext';
 import MessageNotification from './components/common/MessageNotification';
 
@@ -20,6 +20,13 @@ const GlobalNotificationWrapper = () => {
     removeNotification 
   } = useNotifications();
 
+  const {
+    setUser: setUnreadUser,
+    initializeUnreadCounts,
+    startUnreadTracking,
+    stopUnreadTracking
+  } = useUnreadMessages();
+
   useEffect(() => {
     // localStorage에서 사용자 정보 가져오기
     const storedUser = localStorage.getItem('currentUser');
@@ -29,18 +36,26 @@ const GlobalNotificationWrapper = () => {
         const user = JSON.parse(storedUser);
         console.log('🔔 전역 알림 시스템 초기화:', user.nickname);
         setUser(user);
+        setUnreadUser(user);
+        
+        // 읽지 않은 메시지 수 초기화
+        initializeUnreadCounts();
         
         // 전역 메시지 알림 구독 시작
         const notificationChannel = startMessageNotificationSubscription();
         
+        // 읽지 않은 메시지 추적 시작
+        const unreadChannel = startUnreadTracking();
+        
         return () => {
           stopMessageNotificationSubscription(notificationChannel);
+          stopUnreadTracking(unreadChannel);
         };
       } catch (error) {
         console.error('❌ 사용자 정보 파싱 오류:', error);
       }
     }
-  }, [setUser, startMessageNotificationSubscription, stopMessageNotificationSubscription]);
+  }, [setUser, setUnreadUser, initializeUnreadCounts, startMessageNotificationSubscription, stopMessageNotificationSubscription, startUnreadTracking, stopUnreadTracking]);
 
   return (
     <MessageNotification

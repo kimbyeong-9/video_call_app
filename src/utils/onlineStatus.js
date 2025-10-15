@@ -75,6 +75,20 @@ class OnlineStatusManager {
     if (!this.currentUserId) return;
 
     try {
+      // 먼저 현재 사용자의 인증 상태 확인
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.warn('⚠️ 사용자 인증 상태 확인 실패, 온라인 상태 설정 건너뛰기:', authError);
+        return;
+      }
+
+      // 인증된 사용자 ID와 현재 사용자 ID가 일치하는지 확인
+      if (user.id !== this.currentUserId) {
+        console.warn('⚠️ 인증된 사용자 ID와 현재 사용자 ID가 일치하지 않음');
+        return;
+      }
+
       const { error } = await supabase
         .from('user_online_status')
         .upsert(
@@ -95,12 +109,23 @@ class OnlineStatusManager {
           console.warn('⚠️ 온라인 상태 레코드 이미 존재, 무시:', this.currentUserId);
           return;
         }
+        
+        // RLS 정책 오류인 경우 더 자세한 로그 출력
+        if (error.code === '42501') {
+          console.error('❌ RLS 정책 오류 - 사용자 인증 상태를 확인해주세요:', {
+            currentUserId: this.currentUserId,
+            authenticatedUserId: user?.id,
+            error: error.message
+          });
+          return;
+        }
+        
         console.error('❌ 온라인 상태 설정 오류:', error);
         return;
       }
 
       this.lastHeartbeat = new Date();
-      // console.log(`✅ 사용자 온라인 상태 업데이트: ${isOnline ? '온라인' : '오프라인'}`);
+      console.log(`✅ 사용자 온라인 상태 업데이트: ${isOnline ? '온라인' : '오프라인'}`);
     } catch (error) {
       console.error('❌ 온라인 상태 설정 예외:', error);
     }

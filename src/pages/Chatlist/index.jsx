@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiTrash2 } from 'react-icons/fi';
 import { supabase } from '../../utils/supabase';
 import { onlineStatusManager } from '../../utils/onlineStatus';
+import { useUnreadMessages } from '../../contexts/UnreadMessagesContext';
 
 const Chatlist = () => {
   const navigate = useNavigate();
@@ -12,12 +13,15 @@ const Chatlist = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState(new Map()); // 온라인 사용자 상태
   const [swipedItemId, setSwipedItemId] = useState(null); // 스와이프된 아이템 ID
-  const [swipeOffset, setSwipeOffset] = useState(0); // 스와이프 오프셋
+  const [swipeOffsets, setSwipeOffsets] = useState({}); // 각 채팅방별 스와이프 오프셋
   
   // 스와이프 관련 refs
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const isDragging = useRef(false);
+
+  // 읽지 않은 메시지 관리
+  const { getUnreadCount, markRoomAsRead } = useUnreadMessages();
 
   // 채팅방 정렬 함수 (최신순)
   const sortChatRoomsByLatestMessage = useCallback((rooms) => {
@@ -381,8 +385,12 @@ const Chatlist = () => {
         // 채팅 아이템이 아니고 삭제 버튼도 아닌 경우에만 스와이프 닫기
         if (!chatItem && !deleteButton) {
           console.log('🔵 전역 클릭으로 스와이프 닫기');
-          // 부드러운 애니메이션을 위해 먼저 offset을 0으로 설정
-          setSwipeOffset(0);
+          // 부드러운 애니메이션을 위해 먼저 해당 아이템의 offset을 0으로 설정
+          setSwipeOffsets(prev => {
+            const newOffsets = { ...prev };
+            delete newOffsets[swipedItemId];
+            return newOffsets;
+          });
           // 약간의 지연 후 swipedItemId를 null로 설정
           setTimeout(() => {
             setSwipedItemId(null);
@@ -425,7 +433,10 @@ const Chatlist = () => {
       // 왼쪽으로 스와이프할 때만 처리
       if (deltaX < 0) {
         setSwipedItemId(roomId);
-        setSwipeOffset(Math.max(deltaX, -80)); // 최대 80px까지 스와이프
+        setSwipeOffsets(prev => ({
+          ...prev,
+          [roomId]: Math.max(deltaX, -80) // 최대 80px까지 스와이프
+        }));
       }
     }
   };
@@ -438,9 +449,16 @@ const Chatlist = () => {
 
     // 스와이프가 충분히 크면 삭제 버튼 표시, 아니면 원래 위치로
     if (deltaX < -40) {
-      setSwipeOffset(-80);
+      setSwipeOffsets(prev => ({
+        ...prev,
+        [roomId]: -80
+      }));
     } else {
-      setSwipeOffset(0);
+      setSwipeOffsets(prev => {
+        const newOffsets = { ...prev };
+        delete newOffsets[roomId];
+        return newOffsets;
+      });
       setSwipedItemId(null);
     }
 
@@ -452,6 +470,8 @@ const Chatlist = () => {
   const handleChatItemClick = (roomId) => {
     // 스와이프된 상태가 아니면 채팅방 입장
     if (swipedItemId !== roomId) {
+      // 채팅방을 읽음으로 표시
+      markRoomAsRead(roomId);
       navigate(`/chatting/${roomId}`);
     }
   };
@@ -522,7 +542,11 @@ const Chatlist = () => {
       
       // 5. 스와이프 상태 초기화
       setSwipedItemId(null);
-      setSwipeOffset(0);
+      setSwipeOffsets(prev => {
+        const newOffsets = { ...prev };
+        delete newOffsets[roomId];
+        return newOffsets;
+      });
       
       console.log('✅ 채팅방 나가기 완료');
       alert('채팅방을 나갔습니다.');
@@ -605,11 +629,12 @@ const Chatlist = () => {
         <ChatList>
           {chatRooms.map((chat) => {
             const isSwiped = swipedItemId === chat.id;
+            const currentSwipeOffset = swipeOffsets[chat.id] || 0;
             return (
               <ChatItemContainer key={chat.id} data-chat-item={chat.id}>
                 <ChatItem
                   $isSwiped={isSwiped}
-                  $swipeOffset={swipeOffset}
+                  $swipeOffset={currentSwipeOffset}
                   onClick={() => handleChatItemClick(chat.id)}
                   onTouchStart={(e) => handleTouchStart(e, chat.id)}
                   onTouchMove={(e) => handleTouchMove(e, chat.id)}
@@ -625,9 +650,15 @@ const Chatlist = () => {
                   <ChatInfo>
                     <ChatHeader>
                       <Nickname>{chat.nickname}</Nickname>
-                      <LastMessageDate>
-                        {formatDate(chat.lastMessageDate)}
-                      </LastMessageDate>
+                      <TimeContainer>
+                        <LastMessageDate>
+                          {formatDate(chat.lastMessageDate)}
+                        </LastMessageDate>
+                        {/* 읽지 않은 메시지 표시 (빨간 점) */}
+                        {getUnreadCount(chat.id) > 0 && (
+                          <UnreadDot />
+                        )}
+                      </TimeContainer>
                     </ChatHeader>
                     <LastMessage>{chat.lastMessage}</LastMessage>
                   </ChatInfo>
@@ -844,6 +875,37 @@ const DeleteButton = styled.button`
 
   &:active {
     transform: scale(0.95);
+  }
+`;
+
+const TimeContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const UnreadDot = styled.div`
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(135deg, #ff4757, #ff3742);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(255, 71, 87, 0.4);
+  border: 1px solid white;
+  animation: pulse 2s infinite;
+
+  @keyframes pulse {
+    0% {
+      transform: scale(1);
+      box-shadow: 0 2px 4px rgba(255, 71, 87, 0.4);
+    }
+    50% {
+      transform: scale(1.3);
+      box-shadow: 0 3px 6px rgba(255, 71, 87, 0.6);
+    }
+    100% {
+      transform: scale(1);
+      box-shadow: 0 2px 4px rgba(255, 71, 87, 0.4);
+    }
   }
 `;
 

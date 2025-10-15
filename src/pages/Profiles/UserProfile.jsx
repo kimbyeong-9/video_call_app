@@ -92,6 +92,7 @@ const UserProfile = () => {
     }
   };
 
+
   const handleMessageClick = async () => {
     try {
       if (!currentUser) {
@@ -443,5 +444,6 @@ const LoadingText = styled.div`
   color: var(--text-primary);
   font-weight: 500;
 `;
+
 
 export default UserProfile;

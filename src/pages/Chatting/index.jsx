@@ -18,14 +18,20 @@ const Chatting = () => {
   const [showDeleteButton, setShowDeleteButton] = useState(false);
   const chatContentRef = useRef(null);
   const longPressTimerRef = useRef(null);
-  const { markRoomAsRead } = useUnreadMessages();
+  const { markRoomAsRead, setActiveRoom, clearActiveRoom } = useUnreadMessages();
 
   // 1️⃣ 페이지 진입 시 사용자 정보 가져오기 & 기존 메시지 불러오기
   useEffect(() => {
     console.log('🔵 useEffect 실행, roomId:', roomId);
     initializeChat();
-    // 채팅방 입장 시 읽음 처리
+    // 채팅방 입장 시 활성 채팅방 설정 및 읽음 처리
+    setActiveRoom(roomId);
     markRoomAsRead(roomId);
+    
+    // 컴포넌트 언마운트 시 활성 채팅방 해제
+    return () => {
+      clearActiveRoom();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
@@ -535,6 +541,12 @@ const Chatting = () => {
     }
   };
 
+  // 상대방 프로필 클릭 시 해당 유저의 프로필로 이동
+  const handleProfileClick = (userId) => {
+    console.log('🔵 상대방 프로필 클릭:', userId);
+    navigate(`/profiles/${userId}`);
+  };
+
   // 메시지 삭제/숨기기 함수
   const handleDeleteMessage = async (messageId, isOwnMessage) => {
     if (!currentUser) {
@@ -829,7 +841,10 @@ const Chatting = () => {
                   <OpponentMessageContainer>
                     <MessageGroup>
                       {showTimeAndProfile ? (
-                        <ProfileImageWrapper>
+                        <ProfileImageWrapper 
+                          onClick={() => handleProfileClick(msg.user_id)}
+                          style={{ cursor: 'pointer' }}
+                        >
                           {senderImage ? (
                             <ProfileImage src={senderImage} alt={senderName} />
                           ) : (
@@ -842,7 +857,14 @@ const Chatting = () => {
                         <ProfileImagePlaceholder />
                       )}
                       <MessageContent>
-                        {showTimeAndProfile && <SenderName>{senderName}</SenderName>}
+                        {showTimeAndProfile && (
+                          <SenderName 
+                            onClick={() => handleProfileClick(msg.user_id)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {senderName}
+                          </SenderName>
+                        )}
                         <MessageBubble 
                           data-message-bubble={msg.id}
                           $isOwn={isOwn} 
